@@ -1,0 +1,13 @@
+apply plugin: 'java'
+apply from: rootProject.file('gradle/plugins/maven-simple.gradle')
+
+compileJava {
+    sourceCompatibility = 1.6
+    targetCompatibility = 1.6
+}
+
+dependencies {
+    compile project(':service')
+    compile 'io.socket:socket.io-client:0.7.0'
+    compile 'org.java-websocket:Java-WebSocket:1.3.0'
+}
