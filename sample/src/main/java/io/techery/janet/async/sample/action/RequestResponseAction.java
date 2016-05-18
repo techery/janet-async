@@ -6,27 +6,26 @@ import io.techery.janet.async.annotations.PendingResponse;
 import io.techery.janet.async.annotations.Payload;
 import io.techery.janet.async.sample.model.Body;
 
-@AsyncAction(value = "test1", incoming = true)
-public class TestSendReceiveAction {
+@AsyncAction(value = "event_from_client_to_server")
+public class RequestResponseAction {
 
-    @Payload
-    public Body body;
+    @Payload public Body body;
 
     @PendingResponse(value = ResponseMatcher.class, timeout = 3000)
-    public TestSendReceiveAction response;
+    public IncomingResponseAction response;
 
     @Override
     public String toString() {
-        return "TestSendReceiveAction{" +
+        return "RequestResponseAction{" +
                 "body=" + body +
                 ", response=" + response +
                 '}';
     }
 
-    static class ResponseMatcher implements PendingResponseMatcher<TestSendReceiveAction, TestSendReceiveAction> {
+    static class ResponseMatcher implements PendingResponseMatcher<RequestResponseAction, IncomingResponseAction> {
 
         @Override
-        public boolean match(TestSendReceiveAction requestAction, TestSendReceiveAction response) {
+        public boolean match(RequestResponseAction requestAction, IncomingResponseAction response) {
             return requestAction.body.id == response.body.id;
         }
     }

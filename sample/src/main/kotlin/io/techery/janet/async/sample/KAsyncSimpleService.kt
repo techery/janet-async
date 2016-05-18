@@ -4,7 +4,7 @@ import com.google.gson.Gson
 import io.techery.janet.AsyncActionService
 import io.techery.janet.Janet
 import io.techery.janet.async.actions.ConnectAsyncAction
-import io.techery.janet.async.sample.action.TestSendReceiveAction
+import io.techery.janet.async.sample.action.RequestResponseAction
 import io.techery.janet.async.sample.model.Body
 import io.techery.janet.gson.GsonConverter
 import io.techery.janet.helper.ActionStateSubscriber
@@ -20,9 +20,9 @@ fun main(args: Array<String>) {
             .addService(AsyncActionService(API_URL, SocketIO(), GsonConverter(Gson())))
             .build()
 
-    val messagePipe = janet.createPipe(TestSendReceiveAction::class.java)
+    val messagePipe = janet.createPipe(RequestResponseAction::class.java)
 
-    var action = TestSendReceiveAction()
+    var action = RequestResponseAction()
     action.body = Body()
     action.body.id = 1
     action.body.data = "test"
@@ -31,9 +31,11 @@ fun main(args: Array<String>) {
             .createObservable(ConnectAsyncAction())
             .subscribe(ActionStateSubscriber<ConnectAsyncAction>()
                     .onSuccess {
-                        messagePipe.createObservable(action)
-                                .subscribe(ActionStateSubscriber<TestSendReceiveAction>()
-                                        .onSuccess({ println(it) }))
+                        messagePipe
+                                .createObservable(action)
+                                .subscribe(ActionStateSubscriber<RequestResponseAction>()
+                                        .onSuccess({ println(it) })
+                                )
 
                     }
                     .onFail { action, throwable -> throwable.printStackTrace() }

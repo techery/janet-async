@@ -4,16 +4,15 @@ import io.techery.janet.async.annotations.AsyncAction;
 import io.techery.janet.async.annotations.Payload;
 import io.techery.janet.async.sample.model.Body;
 
-@AsyncAction(value = "test2", incoming = true)
-public class TestIncomingAction {
+@AsyncAction(value = "event_from_server_to_client", incoming = true)
+public class IncomingAloneAction {
 
-    @Payload
-    Body data;
+    @Payload Body body;
 
     @Override
     public String toString() {
-        return "TestIncomingAction{" +
-                "data='" + data + '\'' +
+        return "IncomingAloneAction{" +
+                "body='" + body + '\'' +
                 '}';
     }
 
