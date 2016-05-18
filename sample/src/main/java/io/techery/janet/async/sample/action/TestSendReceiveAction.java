@@ -1,18 +1,18 @@
 package io.techery.janet.async.sample.action;
 
-import io.techery.janet.async.SyncPredicate;
+import io.techery.janet.async.PendingResponseMatcher;
 import io.techery.janet.async.annotations.AsyncAction;
-import io.techery.janet.async.annotations.AsyncMessage;
-import io.techery.janet.async.annotations.SyncedResponse;
+import io.techery.janet.async.annotations.PendingResponse;
+import io.techery.janet.async.annotations.Payload;
 import io.techery.janet.async.sample.model.Body;
 
 @AsyncAction(value = "test1", incoming = true)
 public class TestSendReceiveAction {
 
-    @AsyncMessage
+    @Payload
     public Body body;
 
-    @SyncedResponse(value = TestSyncPredicate.class, timeout = 3000)
+    @PendingResponse(value = ResponseMatcher.class, timeout = 3000)
     public TestSendReceiveAction response;
 
     @Override
@@ -23,10 +23,10 @@ public class TestSendReceiveAction {
                 '}';
     }
 
-    public static class TestSyncPredicate implements SyncPredicate<TestSendReceiveAction, TestSendReceiveAction> {
+    static class ResponseMatcher implements PendingResponseMatcher<TestSendReceiveAction, TestSendReceiveAction> {
 
         @Override
-        public boolean isResponse(TestSendReceiveAction requestAction, TestSendReceiveAction response) {
+        public boolean match(TestSendReceiveAction requestAction, TestSendReceiveAction response) {
             return requestAction.body.id == response.body.id;
         }
     }

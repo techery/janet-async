@@ -16,8 +16,8 @@ import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
 
 import io.techery.janet.async.annotations.AsyncAction;
-import io.techery.janet.async.annotations.AsyncMessage;
-import io.techery.janet.async.annotations.SyncedResponse;
+import io.techery.janet.async.annotations.Payload;
+import io.techery.janet.async.annotations.PendingResponse;
 import io.techery.janet.body.BytesArrayBody;
 import io.techery.janet.compiler.utils.ActionClass;
 
@@ -27,9 +27,9 @@ public class AsyncActionClass extends ActionClass {
 
     private String event;
     private final boolean incoming;
-    private SyncedResponseInfo responseInfo;
-    private Element messageField;
-    private boolean isBytesMessage;
+    private PendingResponseInfo responseInfo;
+    private Element payloadField;
+    private boolean isBytesPayload;
 
 
     public AsyncActionClass(Elements elementUtils, TypeElement typeElement) {
@@ -37,31 +37,31 @@ public class AsyncActionClass extends ActionClass {
         AsyncAction annotation = typeElement.getAnnotation(AsyncAction.class);
         this.incoming = annotation.incoming();
         this.event = annotation.value();
-        List<Element> messageFields = getAnnotatedElements(AsyncMessage.class);
-        for (Element field : messageFields) {
-            this.messageField = field;
+        List<Element> payloadFields = getAnnotatedElements(Payload.class);
+        for (Element field : payloadFields) {
+            this.payloadField = field;
             break;
         }
 
-        if (messageField == null) { //validator throw a error
+        if (payloadField == null) { //validator throw a error
             return;
         }
 
-        //defining message is bytes
+        //defining payload is bytes
         ClassName bytesArrayBody = ClassName.get(BytesArrayBody.class);
-        TypeMirror messageSuperClass = elementUtils.getTypeElement(messageField.asType().toString()).getSuperclass();
-        while (messageSuperClass != null && messageSuperClass.getKind() != TypeKind.NONE) {
-            TypeName typeName = ClassName.get(messageSuperClass);
+        TypeMirror payloadSuperClass = elementUtils.getTypeElement(payloadField.asType().toString()).getSuperclass();
+        while (payloadSuperClass != null && payloadSuperClass.getKind() != TypeKind.NONE) {
+            TypeName typeName = ClassName.get(payloadSuperClass);
             if (typeName.toString().equals(bytesArrayBody.toString())) {
-                isBytesMessage = true;
+                isBytesPayload = true;
                 break;
             }
-            messageSuperClass = elementUtils.getTypeElement(messageSuperClass.toString()).getSuperclass();
+            payloadSuperClass = elementUtils.getTypeElement(payloadSuperClass.toString()).getSuperclass();
         }
         //getting response info
-        List<Element> fields = getAnnotatedElements(SyncedResponse.class);
+        List<Element> fields = getAnnotatedElements(PendingResponse.class);
         if (!fields.isEmpty()) {
-            responseInfo = new SyncedResponseInfo(elementUtils, fields.get(0));
+            responseInfo = new PendingResponseInfo(elementUtils, fields.get(0));
         }
     }
 
@@ -81,35 +81,34 @@ public class AsyncActionClass extends ActionClass {
         return getPackageName() + "." + getTypeElement().getSimpleName() + WRAPPER_SUFFIX;
     }
 
-    public boolean isBytesMessage() {
-        return isBytesMessage;
+    public boolean isBytesPayload() {
+        return isBytesPayload;
     }
 
-    public SyncedResponseInfo getResponseInfo() {
+    public PendingResponseInfo getResponseInfo() {
         return responseInfo;
     }
 
-    public Element getMessageField() {
-        return messageField;
+    public Element getPayloadField() {
+        return payloadField;
     }
 
-    final public static class SyncedResponseInfo {
+    final public static class PendingResponseInfo {
         public final String responseEvent;
-        public TypeElement syncPredicateElement;
         public final Element responseField;
         public final TypeElement responseFieldType;
+        public TypeElement responseMatcherElement;
         public long responseTimeout;
 
-        public SyncedResponseInfo(Elements elementUtils, Element responseField) {
+        public PendingResponseInfo(Elements elementUtils, Element responseField) {
             this.responseField = responseField;
             for (AnnotationMirror annotation : responseField.getAnnotationMirrors()) {
-                if (ClassName.get(SyncedResponse.class).equals(ClassName.get(annotation.getAnnotationType()))) {
+                if (ClassName.get(PendingResponse.class).equals(ClassName.get(annotation.getAnnotationType()))) {
                     Map<? extends ExecutableElement, ? extends AnnotationValue> valuesMap = annotation.getElementValues();
                     for (ExecutableElement key : valuesMap.keySet()) {
                         if (key.getSimpleName().contentEquals("value")) {
                             TypeMirror valueMirror = (TypeMirror) valuesMap.get(key).getValue();
-                            this.syncPredicateElement = elementUtils.getTypeElement(ClassName.get(valueMirror)
-                                    .toString());
+                            this.responseMatcherElement = elementUtils.getTypeElement(ClassName.get(valueMirror) .toString());
                         }
                         if (key.getSimpleName().contentEquals("timeout")) {
                             responseTimeout = Long.valueOf(valuesMap.get(key).getValue().toString());

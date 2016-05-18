@@ -12,23 +12,23 @@ Service requires: end-point url, [AsyncClient](clients) and [Converter](https://
  
 ##### 2. Define event action class
 ```java
-@AsyncAction(value = "sample_action_event")
+@AsyncAction("sample_action_event")
 public class SampleAction {
 
-    @AsyncMessage
-    SampleBody body; // body to send
+    @Payload
+    SampleBody body; // body to send (aka message)
 
-    @SyncedResponse(value = SampleSyncPredicate.class, timeout = 3000)
+    @PendingResponse(value = ResponseMatcher.class, timeout = 3000)
     AnotherSampleAction response; // response action to wait for
 
     public SampleAction(SampleBody body) {
         this.body = body;
     }
 
-    public static class SampleSyncPredicate implements SyncPredicate<SampleAction, AnotherSampleAction> {
+    static class ResponseMatcher implements PendingResponseMatcher<SampleAction, AnotherSampleAction> {
 
         @Override
-        public boolean isResponse(SampleAction requestAction, AnotherSampleAction response) {
+        public boolean match(SampleAction requestAction, AnotherSampleAction response) {
             // Condition to link request with response
             return requestAction.body.id == response.body.id;
         }
@@ -39,9 +39,9 @@ Each action is an individual class that contains all information about the reque
 It must be annotated with `@AsyncAction`.
 
 Action (aka event) could be:
-* sent without waiting for specific response;
-* sent with response synchronously (see `@SyncedResponse`);
-* observed as incoming any time from server (`incoming = true`).
+* sent as request message;
+* observed as incoming any time from server (see `incoming = true`);
+* sent with pending response pseudo-synchronization (see `@PendingResponse`);
 
 ##### 3. Use `ActionPipe` to establish connection and send/observe action
 Connection is controlled via system actions:
@@ -77,12 +77,12 @@ connectionPipe.observeSuccessWithReplay().first()
 
 `@AsyncAction` annotation defines:
 * `value` – event name;
-* `incoming` – indicate we can receive action any time from server.  
+* `incoming` – indicates we can receive action any time from server.  
 
 To configure event, annotate fields with:
-* `@AsyncMessage` – body to be sent/received with event;
-* `@SyncedResponse` – action to sync request with:
-    * value – predicate class, defines rule to sync request with response;
+* `@Payload` – body to be sent/received with event, aka message;
+* `@PendingResponse` – pending action from server to sync request with:
+    * value – predicate class, defines rule to match request with response;
     * timeout – if no response received, fail status with exception will be thrown.
 
 ### Advanced bits

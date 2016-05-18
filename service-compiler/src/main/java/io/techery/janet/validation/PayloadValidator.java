@@ -7,12 +7,12 @@ import io.techery.janet.AsyncActionClass;
 import io.techery.janet.compiler.utils.validation.ValidationError;
 import io.techery.janet.compiler.utils.validation.Validator;
 
-public class MessageValidator implements Validator<AsyncActionClass> {
+public class PayloadValidator implements Validator<AsyncActionClass> {
 
     @Override public Set<ValidationError> validate(AsyncActionClass value) {
         Set<ValidationError> errors = new HashSet<ValidationError>();
-        if (value.getMessageField() == null) {
-            errors.add(new ValidationError("Action must have a message field", value.getTypeElement()));
+        if (value.getPayloadField() == null) {
+            errors.add(new ValidationError("Action must have a payload field", value.getTypeElement()));
         }
         return errors;
     }

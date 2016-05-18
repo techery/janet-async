@@ -18,12 +18,12 @@ public abstract class AsyncActionWrapper<A> {
         this.action = holder.action();
     }
 
-    protected abstract boolean isBytesMessage();
+    protected abstract boolean isBytesPayload();
     protected abstract String getEvent();
-    protected abstract ActionBody getMessage(Converter converter) throws ConverterException;
+    protected abstract ActionBody getPayload(Converter converter) throws ConverterException;
     protected abstract String getResponseEvent();
     protected abstract boolean fillResponse(Object responseAction);
-    protected abstract void fillMessage(BytesArrayBody body, Converter converter) throws ConverterException;
+    protected abstract void fillPayload(BytesArrayBody body, Converter converter) throws ConverterException;
 
     public void cancelExpireFuture() {
         if (scheduledFuture != null) {

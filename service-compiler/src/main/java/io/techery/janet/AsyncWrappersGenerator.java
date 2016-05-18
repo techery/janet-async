@@ -13,8 +13,8 @@ import javax.annotation.processing.Filer;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.Modifier;
 
-import io.techery.janet.async.SyncPredicate;
-import io.techery.janet.async.annotations.AsyncMessage;
+import io.techery.janet.async.PendingResponseMatcher;
+import io.techery.janet.async.annotations.Payload;
 import io.techery.janet.body.ActionBody;
 import io.techery.janet.body.BytesArrayBody;
 import io.techery.janet.compiler.utils.Generator;
@@ -41,12 +41,12 @@ public class AsyncWrappersGenerator extends Generator<AsyncActionClass> {
 
         createConstructor(classBuilder, actionClass);
 
-        classBuilder.addMethod(createIsBytesMessageMethod(actionClass))
+        classBuilder.addMethod(createIsBytesPayloadMethod(actionClass))
                 .addMethod(createGetEventMethod(actionClass))
-                .addMethod(createGetMessageMethod(actionClass))
+                .addMethod(createGetPayloadMethod(actionClass))
                 .addMethod(createGetResponseEventMethod(actionClass))
                 .addMethod(createFillResponseMethod(actionClass))
-                .addMethod(createFillMessageMethod(actionClass))
+                .addMethod(createFillPayloadMethod(actionClass))
                 .addMethod(createGetResponseTimeoutMethod(actionClass));
 
 
@@ -59,19 +59,19 @@ public class AsyncWrappersGenerator extends Generator<AsyncActionClass> {
                 .addParameter(ParameterizedTypeName.get(ClassName.get(ActionHolder.class), actionClass.getTypeName()), "holder")
                 .addStatement("super(holder)");
         if (actionClass.getResponseInfo() != null) {
-            builder.addField(SyncPredicate.class, "syncPredicate", Modifier.PRIVATE, Modifier.FINAL);
-            constructorBuilder.addStatement("this.syncPredicate = new $T()", actionClass.getResponseInfo().syncPredicateElement);
+            builder.addField(PendingResponseMatcher.class, "responseMatcher", Modifier.PRIVATE, Modifier.FINAL);
+            constructorBuilder.addStatement("this.responseMatcher = new $T()", actionClass.getResponseInfo().responseMatcherElement);
         }
         builder.addMethod(constructorBuilder.build());
         return builder;
     }
 
-    private static MethodSpec createIsBytesMessageMethod(AsyncActionClass actionClass) {
-        return MethodSpec.methodBuilder("isBytesMessage")
+    private static MethodSpec createIsBytesPayloadMethod(AsyncActionClass actionClass) {
+        return MethodSpec.methodBuilder("isBytesPayload")
                 .addAnnotation(Override.class)
                 .addModifiers(Modifier.PUBLIC)
                 .returns(boolean.class)
-                .addStatement("return $L", actionClass.isBytesMessage())
+                .addStatement("return $L", actionClass.isBytesPayload())
                 .build();
     }
 
@@ -84,16 +84,16 @@ public class AsyncWrappersGenerator extends Generator<AsyncActionClass> {
                 .build();
     }
 
-    private static MethodSpec createGetMessageMethod(AsyncActionClass actionClass) {
-        MethodSpec.Builder builder = MethodSpec.methodBuilder("getMessage")
+    private static MethodSpec createGetPayloadMethod(AsyncActionClass actionClass) {
+        MethodSpec.Builder builder = MethodSpec.methodBuilder("getPayload")
                 .addAnnotation(Override.class)
                 .addModifiers(Modifier.PUBLIC)
                 .addParameter(Converter.class, "converter")
                 .returns(ActionBody.class);
-        List<Element> fields = actionClass.getAnnotatedElements(AsyncMessage.class);
+        List<Element> fields = actionClass.getAnnotatedElements(Payload.class);
         if (!fields.isEmpty()) {
             Element field = fields.get(0);
-            if (actionClass.isBytesMessage()) {
+            if (actionClass.isBytesPayload()) {
                 builder.addStatement("return action.$L", field);
             } else {
                 builder.addStatement("return converter.toBody(action.$L)", field);
@@ -125,7 +125,7 @@ public class AsyncWrappersGenerator extends Generator<AsyncActionClass> {
                 .addParameter(Object.class, "responseAction")
                 .returns(boolean.class);
         if (actionClass.getResponseInfo() != null) {
-            builder.beginControlFlow("if(syncPredicate.isResponse(this.action, responseAction))");
+            builder.beginControlFlow("if(responseMatcher.match(this.action, responseAction))");
             builder.addStatement("action.$L = ($L)responseAction", actionClass.getResponseInfo().responseField, actionClass
                     .getResponseInfo().responseField.asType());
             builder.addStatement("return true");
@@ -137,22 +137,23 @@ public class AsyncWrappersGenerator extends Generator<AsyncActionClass> {
         return builder.build();
     }
 
-    private static MethodSpec createFillMessageMethod(AsyncActionClass actionClass) {
-        Element messageField = actionClass.getMessageField();
-        MethodSpec.Builder builder = MethodSpec.methodBuilder("fillMessage")
+    private static MethodSpec createFillPayloadMethod(AsyncActionClass actionClass) {
+        Element payloadField = actionClass.getPayloadField();
+        MethodSpec.Builder builder = MethodSpec.methodBuilder("fillPayload")
                 .addAnnotation(Override.class)
                 .addModifiers(Modifier.PUBLIC)
                 .addParameter(BytesArrayBody.class, "body")
                 .addParameter(Converter.class, "converter");
         builder.beginControlFlow("if(body == null)");
-        builder.addStatement("action.$L = null", messageField);
+        builder.addStatement("action.$L = null", payloadField);
         builder.addStatement("return");
         builder.endControlFlow();
-        if (actionClass.isBytesMessage()) {
-            builder.addStatement("action.$L = ($T) body", messageField, messageField.asType());
+        if (actionClass.isBytesPayload()) {
+            builder.addStatement("action.$L = ($T) body", payloadField, payloadField.asType());
         } else {
-            builder.addStatement("action.$L =  ($T) converter.fromBody(body, new $T<$T>(){}.getType())", messageField, messageField
-                    .asType(), TypeToken.class, messageField.asType());
+            builder.addStatement("action.$L =  ($T) converter.fromBody(body, new $T<$T>(){}.getType())",
+                    payloadField, payloadField.asType(), TypeToken.class, payloadField.asType()
+            );
         }
         return builder.build();
     }

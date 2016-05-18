@@ -97,21 +97,21 @@ public class SocketIO extends AsyncClient {
         }
     }
 
-    @Override protected void send(String event, String string) throws Throwable {
+    @Override protected void send(String event, String payload) throws Throwable {
         if (!isConnected()) return;
         //
-        Object payload;
+        Object obj;
         try {
-            payload = new JSONObject(string);
+            obj = new JSONObject(payload);
         } catch (JSONException e) {
-            payload = string;
+            obj = payload;
         }
-        socket.emit(event, payload);
+        socket.emit(event, obj);
     }
 
-    @Override protected void send(String event, byte[] bytes) throws Throwable {
+    @Override protected void send(String event, byte[] payload) throws Throwable {
         if (isConnected()) {
-            socket.emit(event, new Object[]{bytes});
+            socket.emit(event, new Object[]{payload});
         }
     }
 

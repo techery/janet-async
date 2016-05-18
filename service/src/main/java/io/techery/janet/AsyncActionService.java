@@ -6,15 +6,15 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import io.techery.janet.AsyncActionService.QueuePoller.PollCallback;
-import io.techery.janet.async.SyncPredicate;
+import io.techery.janet.async.PendingResponseMatcher;
 import io.techery.janet.async.actions.ConnectAsyncAction;
 import io.techery.janet.async.actions.DisconnectAsyncAction;
 import io.techery.janet.async.actions.ErrorAsyncAction;
 import io.techery.janet.async.annotations.AsyncAction;
-import io.techery.janet.async.annotations.AsyncMessage;
-import io.techery.janet.async.annotations.SyncedResponse;
+import io.techery.janet.async.annotations.PendingResponse;
+import io.techery.janet.async.annotations.Payload;
 import io.techery.janet.async.exception.AsyncServiceException;
-import io.techery.janet.async.exception.SyncedResponseException;
+import io.techery.janet.async.exception.PendingResponseException;
 import io.techery.janet.body.ActionBody;
 import io.techery.janet.body.BytesArrayBody;
 import io.techery.janet.body.StringBody;
@@ -24,12 +24,12 @@ import io.techery.janet.converter.ConverterException;
 /**
  * Provide support async protocols. {@link AsyncActionService} performs actions with annotation
  * {@linkplain AsyncAction @AsyncAction}. Every action is async message that contains message data as a field annotated
- * with {@linkplain AsyncMessage @AsyncMessage}.
+ * with {@linkplain Payload @Payload}.
  * <p>
- * Also {@linkplain AsyncActionService} has algorithm to synchronize outcoming and incoming messages. To receive action
- * response may add field with annotation {@linkplain SyncedResponse @SyncedResponse}. Type of that field must be
- * a class of incoming action. To link action with its response set class in the annotation implemented by
- * {@linkplain SyncPredicate} where the condition for synchronization present.
+ * Also {@linkplain AsyncActionService} has algorithm to synchronize outcoming and incoming messages.
+ * Action could wait for response and store it to field with annotation {@linkplain PendingResponse @PendingResponse}.
+ * Type of that field must be a class of incoming action. To link action with its response set class in the annotation implemented by
+ * {@linkplain PendingResponseMatcher} where the condition for matching present.
  */
 final public class AsyncActionService extends ActionService {
 
@@ -125,9 +125,9 @@ final public class AsyncActionService extends ActionService {
             synchronizer.put(responseEvent, wrapper);
         }
         try {
-            ActionBody actionBody = wrapper.getMessage(converter);
+            ActionBody actionBody = wrapper.getPayload(converter);
             byte[] content = actionBody.getContent();
-            if (wrapper.isBytesMessage()) {
+            if (wrapper.isBytesPayload()) {
                 client.send(wrapper.getEvent(), content);
             } else {
                 client.send(wrapper.getEvent(), new String(content));
@@ -190,17 +190,17 @@ final public class AsyncActionService extends ActionService {
         List<Class> actionClassList = actionsRoster.getActionClasses(event);
         for (Class actionClass : actionClassList) {
             ActionHolder holder = ActionHolder.create((createActionInstance(actionClass)));
-            AsyncActionWrapper messageWrapper = actionWrapperFactory.make(holder);
-            if (messageWrapper == null) {
+            AsyncActionWrapper actionWrapper = actionWrapperFactory.make(holder);
+            if (actionWrapper == null) {
                 throw new JanetInternalException(ERROR_GENERATOR);
             }
             try {
-                messageWrapper.fillMessage(body, converter);
+                actionWrapper.fillPayload(body, converter);
             } catch (ConverterException e) {
                 callback.onFail(holder, new AsyncServiceException(e));
             }
             if (synchronizer.contains(event)) {
-                for (AsyncActionWrapper wrapper : synchronizer.sync(event, messageWrapper.action, new AsyncActionSynchronizer.Predicate() {
+                for (AsyncActionWrapper wrapper : synchronizer.sync(event, actionWrapper.action, new AsyncActionSynchronizer.Predicate() {
                     @Override public boolean call(AsyncActionWrapper wrapper, Object responseAction) {
                         try {
                             return wrapper.fillResponse(responseAction);
@@ -286,14 +286,14 @@ final public class AsyncActionService extends ActionService {
     private final AsyncActionSynchronizer.OnCleanedListener waitingErrorCallback = new AsyncActionSynchronizer.OnCleanedListener() {
         @Override
         public void onCleaned(AsyncActionWrapper wrapper, Reason reason) {
-            SyncedResponseException exception = null;
+            PendingResponseException exception = null;
             switch (reason) {
                 case TIMEOUT: {
-                    exception = SyncedResponseException.forTimeout(wrapper.getResponseTimeout());
+                    exception = PendingResponseException.forTimeout(wrapper.getResponseTimeout());
                     break;
                 }
                 case LIMIT: {
-                    exception = SyncedResponseException.forLimit(AsyncActionSynchronizer.PENDING_ACTIONS_EVENT_LIMIT);
+                    exception = PendingResponseException.forLimit(AsyncActionSynchronizer.PENDING_ACTIONS_EVENT_LIMIT);
                     break;
                 }
             }

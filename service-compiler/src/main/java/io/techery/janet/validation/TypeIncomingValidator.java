@@ -7,7 +7,6 @@ import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.util.ElementFilter;
 
 import io.techery.janet.AsyncActionClass;
-import io.techery.janet.async.annotations.SyncedResponse;
 import io.techery.janet.compiler.utils.validation.ValidationError;
 import io.techery.janet.compiler.utils.validation.Validator;
 

@@ -10,9 +10,9 @@ public abstract class AsyncClient {
 
     protected abstract void disconnect() throws Throwable;
 
-    protected abstract void send(String event, String string) throws Throwable;
+    protected abstract void send(String event, String payload) throws Throwable;
 
-    protected abstract void send(String event, byte[] bytes) throws Throwable;
+    protected abstract void send(String event, byte[] payload) throws Throwable;
 
     protected abstract void subscribe(String event);
 
@@ -25,7 +25,7 @@ public abstract class AsyncClient {
         void onDisconnect(String reason);
         void onConnectionError(Throwable throwable);
         void onError(Throwable throwable);
-        void onMessage(String event, String string);
-        void onMessage(String event, byte[] bytes);
+        void onMessage(String event, String payload);
+        void onMessage(String event, byte[] payload);
     }
 }
