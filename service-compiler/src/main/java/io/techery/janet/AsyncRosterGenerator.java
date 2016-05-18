@@ -36,6 +36,7 @@ public class AsyncRosterGenerator extends Generator<AsyncActionClass> {
         });
         String event = null;
         for (AsyncActionClass actionClass : actionClasses) {
+            if (!actionClass.isIncoming()) continue;
             if (!actionClass.getEvent().equals(event)) {
                 event = actionClass.getEvent();
                 constructorBuilder.addStatement("map.put($S, new $T())", event, ParameterizedTypeName.get(ArrayList.class, Class.class));

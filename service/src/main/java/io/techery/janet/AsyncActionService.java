@@ -297,7 +297,7 @@ final public class AsyncActionService extends ActionService {
                     break;
                 }
             }
-            callback.onFail(wrapper.holder, new AsyncServiceException("Action " + wrapper.action + " has not waited for a response.", exception));
+            callback.onFail(wrapper.holder, new AsyncServiceException("Action " + wrapper.action + " hasn't got a response.", exception));
         }
     };
 
