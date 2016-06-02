@@ -1,6 +1,5 @@
 package io.techery.janet;
 
-import com.google.common.reflect.TypeToken;
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.ParameterizedTypeName;
@@ -19,6 +18,7 @@ import io.techery.janet.body.ActionBody;
 import io.techery.janet.body.BytesArrayBody;
 import io.techery.janet.compiler.utils.Generator;
 import io.techery.janet.converter.Converter;
+import io.techery.janet.internal.TypeToken;
 
 public class AsyncWrappersGenerator extends Generator<AsyncActionClass> {
 
