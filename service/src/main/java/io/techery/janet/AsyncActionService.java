@@ -91,10 +91,7 @@ final public class AsyncActionService extends ActionService {
         }
         try {
             runningActions.add(holder.action());
-            AsyncActionWrapper wrapper = actionWrapperFactory.make(holder);
-            if (wrapper == null) {
-                throw new JanetInternalException(ERROR_GENERATOR);
-            }
+            AsyncActionWrapper wrapper = getAsyncActionWrapper(holder);
             if (!client.isConnected()) {
                 connect(false);
             }
@@ -109,10 +106,7 @@ final public class AsyncActionService extends ActionService {
     }
 
     @Override protected <A> void cancel(ActionHolder<A> holder) {
-        AsyncActionWrapper wrapper = actionWrapperFactory.make(holder);
-        if (wrapper == null) {
-            throw new JanetInternalException(ERROR_GENERATOR);
-        }
+        AsyncActionWrapper wrapper = getAsyncActionWrapper(holder);
         runningActions.remove(holder.action());
         if (wrapper.getResponseEvent() != null) {
             synchronizer.remove(wrapper);
@@ -190,10 +184,7 @@ final public class AsyncActionService extends ActionService {
         List<Class> actionClassList = actionsRoster.getActionClasses(event);
         for (Class actionClass : actionClassList) {
             ActionHolder holder = ActionHolder.create((createActionInstance(actionClass)));
-            AsyncActionWrapper actionWrapper = actionWrapperFactory.make(holder);
-            if (actionWrapper == null) {
-                throw new JanetInternalException(ERROR_GENERATOR);
-            }
+            AsyncActionWrapper actionWrapper = getAsyncActionWrapper(holder);
             try {
                 actionWrapper.fillPayload(body, converter);
             } catch (ConverterException e) {
@@ -300,6 +291,14 @@ final public class AsyncActionService extends ActionService {
             callback.onFail(wrapper.holder, new AsyncServiceException("Action " + wrapper.action + " hasn't got a response.", exception));
         }
     };
+
+    private <A> AsyncActionWrapper getAsyncActionWrapper(ActionHolder<A> holder) {
+        AsyncActionWrapper wrapper = actionWrapperFactory.make(holder);
+        if (wrapper == null) {
+            throw new JanetInternalException(ERROR_GENERATOR);
+        }
+        return wrapper;
+    }
 
     @SuppressWarnings("unchecked")
     private void loadActionWrapperFactory() {
