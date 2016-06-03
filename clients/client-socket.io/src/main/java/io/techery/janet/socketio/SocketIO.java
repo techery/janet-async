@@ -10,6 +10,7 @@ import io.socket.client.IO;
 import io.socket.client.Socket;
 import io.socket.emitter.Emitter;
 import io.techery.janet.AsyncClient;
+import io.techery.janet.async.model.Message;
 
 public class SocketIO extends AsyncClient {
 
@@ -72,13 +73,14 @@ public class SocketIO extends AsyncClient {
         });
         for (final String event : events) {
             socket.on(event, new Emitter.Listener() {
-                @Override public void call(Object... args) {
+                @Override
+                public void call(Object... args) {
+                    String data = null;
                     if (args.length > 0) {
                         Object value = args[0];
-                        callback.onMessage(event, String.valueOf(value));
-                    } else {
-                        callback.onMessage(event, (String) null);
+                        data = String.valueOf(value);
                     }
+                    callback.onMessage(Message.createTextMessage(event, data));
                 }
             });
         }
@@ -96,15 +98,17 @@ public class SocketIO extends AsyncClient {
         }
     }
 
-    @Override protected void send(String event, String payload) throws Throwable {
+    @Override protected void send(Message message) throws Throwable {
         if (isConnected()) {
-            socket.emit(event, new JSONObject(payload));
-        }
-    }
-
-    @Override protected void send(String event, byte[] payload) throws Throwable {
-        if (isConnected()) {
-            socket.emit(event, new Object[]{payload});
+            switch (message.getType()) {
+                case TEXT: {
+                    socket.emit(message.getEvent(), new JSONObject(message.getDataAsText()));
+                    break;
+                }
+                case BINARY: {
+                    socket.emit(message.getEvent(), new Object[]{message.getDataAsBinary()});
+                }
+            }
         }
     }
 

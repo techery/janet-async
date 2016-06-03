@@ -2,22 +2,17 @@ package io.techery.janet;
 
 import com.squareup.javapoet.ClassName;
 
+import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.AnnotationValue;
 import javax.lang.model.element.Element;
-import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;
-import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 
 import io.techery.janet.async.annotations.AsyncAction;
 import io.techery.janet.async.annotations.Payload;
-import io.techery.janet.async.annotations.PendingResponse;
 import io.techery.janet.body.BytesArrayBody;
 import io.techery.janet.compiler.utils.ActionClass;
 
@@ -25,53 +20,26 @@ public class AsyncActionClass extends ActionClass {
 
     public final static String WRAPPER_SUFFIX = "Wrapper";
 
+    private final Types typesUtils;
     private String event;
-    private final boolean incoming;
-    private PendingResponseInfo responseInfo;
-    private VariableElement payloadField;
-    private boolean isBytesPayload;
-    private Types typesUtils;
+    private boolean incoming;
+    private AsyncActionClass parent;
 
 
-    public AsyncActionClass(Elements elementUtils, Types typesUtils, TypeElement typeElement) {
+    public AsyncActionClass(Elements elementUtils, Types typesUtils, TypeElement typeElement, AsyncActionClass parent) {
         super(AsyncAction.class, elementUtils, typeElement);
         this.typesUtils = typesUtils;
+        this.parent = parent;
         AsyncAction annotation = typeElement.getAnnotation(AsyncAction.class);
-        this.incoming = annotation.incoming();
-        this.event = annotation.value();
-        List<Element> payloadFields = getAnnotatedElements(Payload.class);
-        for (Element field : payloadFields) {
-            this.payloadField = (VariableElement) field;
-            break;
-        }
-
-        if (payloadField == null) { //validator throw a error
-            return;
-        }
-
-        //defining payload is bytes
-        isBytesPayload = isBytesElement(typesUtils, typesUtils.asElement(payloadField.asType()));
-        //getting response info
-        List<Element> fields = getAnnotatedElements(PendingResponse.class);
-        if (!fields.isEmpty()) {
-            responseInfo = new PendingResponseInfo(typesUtils, fields.get(0));
+        if (annotation != null) {
+            this.incoming = annotation.incoming();
+            this.event = annotation.value();
         }
     }
 
-    private boolean isBytesElement(Types typeUtils, Element element) {
-        if (element instanceof TypeElement) {
-            TypeElement typeElement = (TypeElement) element;
-            if (ClassName.get(typeElement.asType()).toString()
-                    .equals(ClassName.get(BytesArrayBody.class).toString())) {
-                return true;
-            }
-            if (typeElement.getSuperclass() != null) {
-                return isBytesElement(typeUtils, typeUtils.asElement(typeElement.getSuperclass()));
-            }
-        }
-        return false;
+    public boolean isAnnotatedClass() {
+        return event != null;
     }
-
 
     public String getEvent() {
         return event;
@@ -81,53 +49,51 @@ public class AsyncActionClass extends ActionClass {
         return incoming;
     }
 
+    public AsyncActionClass getParent() {
+        return parent;
+    }
+
+    public boolean isBytesPayload() {
+        List<Element> payloadFields = getAnnotatedElements(Payload.class);
+        for (Element element : payloadFields) {
+            if (element instanceof TypeElement) {
+                TypeElement typeElement = (TypeElement) element;
+                if (ClassName.get(typeElement.asType()).toString()
+                        .equals(ClassName.get(BytesArrayBody.class).toString())) {
+                    return true;
+                }
+            }
+        }
+        if (parent != null) {
+            return parent.isBytesPayload();
+        }
+        return false;
+    }
+
+    @Override public List<Element> getAnnotatedElements(Class annotationClass) {
+        List<Element> elements = super.getAnnotatedElements(annotationClass);
+        for (Iterator<Element> iterator = elements.iterator(); iterator.hasNext(); ) {
+            Element element = iterator.next();
+            if (!element.getEnclosingElement().equals(getTypeElement())) {
+                iterator.remove();
+            }
+        }
+        return elements;
+    }
+
+    public List<Element> getAllAnnotatedElements(Class annotationClass) {
+        List<Element> elements = new ArrayList<Element>(getAnnotatedElements(annotationClass));
+        if (parent != null) {
+            elements.addAll(parent.getAllAnnotatedElements(annotationClass));
+        }
+        return elements;
+    }
+
     public String getWrapperName() {
         return getTypeElement().getSimpleName() + WRAPPER_SUFFIX;
     }
 
     public String getFullWrapperName() {
         return getPackageName() + "." + getTypeElement().getSimpleName() + WRAPPER_SUFFIX;
-    }
-
-    public boolean isBytesPayload() {
-        return isBytesPayload;
-    }
-
-    public PendingResponseInfo getResponseInfo() {
-        return responseInfo;
-    }
-
-    public Element getPayloadField() {
-        return payloadField;
-    }
-
-    final public static class PendingResponseInfo {
-        public final String responseEvent;
-        public final Element responseField;
-        public final TypeElement responseFieldType;
-        public TypeElement responseMatcherElement;
-        public long responseTimeout;
-
-        public PendingResponseInfo(Types typeUtils, Element responseField) {
-            this.responseField = responseField;
-            for (AnnotationMirror annotation : responseField.getAnnotationMirrors()) {
-                if (ClassName.get(PendingResponse.class).equals(ClassName.get(annotation.getAnnotationType()))) {
-                    Map<? extends ExecutableElement, ? extends AnnotationValue> valuesMap = annotation.getElementValues();
-                    for (ExecutableElement key : valuesMap.keySet()) {
-                        if (key.getSimpleName().contentEquals("value")) {
-                            TypeMirror valueMirror = (TypeMirror) valuesMap.get(key).getValue();
-                            this.responseMatcherElement = (TypeElement) typeUtils.asElement(valueMirror);
-                        }
-                        if (key.getSimpleName().contentEquals("timeout")) {
-                            responseTimeout = Long.valueOf(valuesMap.get(key).getValue().toString());
-                        }
-                    }
-                    break;
-                }
-            }
-            responseFieldType = (TypeElement) typeUtils.asElement(responseField.asType());
-            AsyncAction asyncAction = responseFieldType.getAnnotation(AsyncAction.class);
-            this.responseEvent = asyncAction.value();
-        }
     }
 }

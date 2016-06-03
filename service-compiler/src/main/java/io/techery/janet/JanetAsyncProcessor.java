@@ -68,12 +68,6 @@ public class JanetAsyncProcessor extends AbstractProcessor {
         if (annotations.isEmpty()) return true;
         ArrayList<AsyncActionClass> actionClasses = new ArrayList<AsyncActionClass>();
         for (Element element : roundEnv.getElementsAnnotatedWith(AsyncAction.class)) {
-            Set<ValidationError> errors = new HashSet<ValidationError>();
-            errors.addAll(classValidator.validate(element));
-            if (!errors.isEmpty()) {
-                printErrors(errors);
-                continue;
-            }
             TypeElement typeElement = (TypeElement) element;
             boolean isSystem = false;
             for (TypeMirror iface : typeElement.getInterfaces()) {
@@ -84,8 +78,8 @@ public class JanetAsyncProcessor extends AbstractProcessor {
                 }
             }
             if (isSystem) continue;
-            AsyncActionClass actionClass = new AsyncActionClass(elementUtils, typeUtils, typeElement);
-            errors.addAll(asyncActionValidators.validate(actionClass));
+            AsyncActionClass actionClass = createActionClass(typeElement);
+            Set<ValidationError> errors = asyncActionValidators.validate(actionClass);
             if (!errors.isEmpty()) {
                 printErrors(errors);
                 continue;
@@ -99,6 +93,26 @@ public class JanetAsyncProcessor extends AbstractProcessor {
         rosterGenerator.generate(actionClasses);
         return true;
     }
+
+    private AsyncActionClass createActionClass(TypeElement actionElement) {
+        Set<ValidationError> errors = classValidator.validate(actionElement);
+        if (!errors.isEmpty()) {
+            printErrors(errors);
+            return null;
+        }
+        AsyncActionClass parent = null;
+        if (actionElement.getSuperclass() != null) {
+            TypeElement parentElement = (TypeElement) typeUtils.asElement(actionElement.getSuperclass());
+            if (parentElement != null) {
+                AsyncActionClass subClass = createActionClass(parentElement);
+                if (subClass != null && !subClass.getAllAnnotatedMembers().isEmpty()) {
+                    parent = subClass;
+                }
+            }
+        }
+        return new AsyncActionClass(elementUtils, typeUtils, actionElement, parent);
+    }
+
 
     private void printErrors(Collection<ValidationError> errors) {
         for (ValidationError error : errors) {

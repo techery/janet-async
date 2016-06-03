@@ -6,15 +6,18 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import io.techery.janet.AsyncActionService.QueuePoller.PollCallback;
-import io.techery.janet.async.PendingResponseMatcher;
 import io.techery.janet.async.actions.ConnectAsyncAction;
 import io.techery.janet.async.actions.DisconnectAsyncAction;
 import io.techery.janet.async.actions.ErrorAsyncAction;
 import io.techery.janet.async.annotations.AsyncAction;
 import io.techery.janet.async.annotations.Payload;
-import io.techery.janet.async.annotations.PendingResponse;
+import io.techery.janet.async.annotations.Response;
 import io.techery.janet.async.exception.AsyncServiceException;
 import io.techery.janet.async.exception.PendingResponseException;
+import io.techery.janet.async.model.IncomingMessage;
+import io.techery.janet.async.model.Message;
+import io.techery.janet.async.model.WaitingAction;
+import io.techery.janet.async.protocol.AsyncProtocol;
 import io.techery.janet.body.ActionBody;
 import io.techery.janet.body.BytesArrayBody;
 import io.techery.janet.body.StringBody;
@@ -27,9 +30,9 @@ import io.techery.janet.converter.ConverterException;
  * with {@linkplain Payload @Payload}.
  * <p/>
  * Also {@linkplain AsyncActionService} has algorithm to synchronize outcoming and incoming messages.
- * Action could wait for response and store it to field with annotation {@linkplain PendingResponse @PendingResponse}.
+ * Action could wait for response and store it to field with annotation {@linkplain Response @Response}.
  * Type of that field must be a class of incoming action. To link action with its response set class in the annotation implemented by
- * {@linkplain PendingResponseMatcher} where the condition for matching present.
+ * PendingResponseMatcher where the condition for matching present.
  */
 final public class AsyncActionService extends ActionService {
 
@@ -45,6 +48,7 @@ final public class AsyncActionService extends ActionService {
 
     private final String url;
     private final AsyncClient client;
+    private final AsyncProtocol protocol;
     private final Converter converter;
 
     private final ConcurrentLinkedQueue<ActionHolder<ConnectAsyncAction>> connectActionQueue;
@@ -55,18 +59,22 @@ final public class AsyncActionService extends ActionService {
     private final List<Object> runningActions;
 
 
-    public AsyncActionService(String url, AsyncClient client, Converter converter) {
+    public AsyncActionService(String url, AsyncClient client, AsyncProtocol protocol, Converter converter) {
         if (url == null) {
             throw new IllegalArgumentException("url == null");
         }
         if (client == null) {
             throw new IllegalArgumentException("client == null");
         }
+        if (protocol == null) {
+            throw new IllegalArgumentException("protocol == null");
+        }
         if (converter == null) {
             throw new IllegalArgumentException("converter == null");
         }
         this.url = url;
         this.client = client;
+        this.protocol = protocol;
         this.converter = converter;
         this.connectActionQueue = new ConcurrentLinkedQueue<ActionHolder<ConnectAsyncAction>>();
         this.disconnectActionQueue = new ConcurrentLinkedQueue<ActionHolder<DisconnectAsyncAction>>();
@@ -96,7 +104,7 @@ final public class AsyncActionService extends ActionService {
                 connect(false);
             }
             sendAction(wrapper);
-            if (wrapper.getResponseEvent() == null) {
+            if (!wrapper.hasResponse()) {
                 callback.onSuccess(holder);
             }
         } catch (CancelException ignored) {
@@ -108,23 +116,36 @@ final public class AsyncActionService extends ActionService {
     @Override protected <A> void cancel(ActionHolder<A> holder) {
         AsyncActionWrapper wrapper = getAsyncActionWrapper(holder);
         runningActions.remove(holder.action());
-        if (wrapper.getResponseEvent() != null) {
+        if (wrapper.hasResponse()) {
             synchronizer.remove(wrapper);
         }
     }
 
     private void sendAction(AsyncActionWrapper wrapper) throws AsyncServiceException, CancelException {
-        String responseEvent = wrapper.getResponseEvent();
-        if (responseEvent != null) {
-            synchronizer.put(responseEvent, wrapper);
-        }
         try {
-            ActionBody actionBody = wrapper.getPayload(converter);
-            byte[] content = actionBody.getContent();
+            ActionBody payloadBody;
             if (wrapper.isBytesPayload()) {
-                client.send(wrapper.getEvent(), content);
+                payloadBody = (ActionBody) wrapper.getPayload();
             } else {
-                client.send(wrapper.getEvent(), new String(content));
+                payloadBody = converter.toBody(wrapper.getPayload());
+            }
+            Message message;
+            byte[] content = payloadBody.getContent();
+            if (wrapper.isBytesPayload()) {
+                message = protocol.binaryPayloadConverter().createMessage(wrapper.getEvent(), content);
+            } else {
+                message = protocol.textPayloadConverter().createMessage(wrapper.getEvent(), new String(content));
+            }
+            wrapper.setMessage(message);
+            client.send(message);
+            if (wrapper.hasResponse()) {
+                if (protocol.responseMatcher() == null) {
+                    throw new JanetInternalException(
+                            String.format("Action %s can't be sent because waits response but ResponseMatcher wasn't declared", wrapper.action
+                                    .getClass()
+                                    .getSimpleName()));
+                }
+                synchronizer.put(wrapper);
             }
             throwIfCanceled(wrapper.action);
         } catch (CancelException e) {
@@ -153,7 +174,11 @@ final public class AsyncActionService extends ActionService {
             return true;
         }
         if (action instanceof DisconnectAsyncAction) {
-            disconnect();
+            try {
+                client.disconnect();
+            } catch (Throwable t) {
+                throw new AsyncServiceException(t);
+            }
             disconnectActionQueue.add((ActionHolder<DisconnectAsyncAction>) holder);
             return true;
         }
@@ -168,47 +193,57 @@ final public class AsyncActionService extends ActionService {
         }
     }
 
-    private void disconnect() throws AsyncServiceException {
-        try {
-            client.disconnect();
-        } catch (Throwable t) {
-            throw new AsyncServiceException(t);
-        }
-    }
-
-    private void onMessageReceived(String event, BytesArrayBody body) {
-        if (!actionsRoster.containsEvent(event)) {
-            System.err.println(String.format("Received sync message %s is not defined by any action :(. The message contains body %s", event, body));
+    private void onMessageReceived(Message message) {
+        if (!actionsRoster.containsEvent(message.getEvent())) {
+            System.err.println(String.format("Received sync message %s is not defined by any action :(. The message contains body %s", message
+                    .getEvent(), message.getDataAsText()));
             return;
         }
-        List<Class> actionClassList = actionsRoster.getActionClasses(event);
-        for (Class actionClass : actionClassList) {
+        Throwable extractError = null;
+        BytesArrayBody payloadBody = null;
+        try {
+            payloadBody = extractPayload(message);
+        } catch (Throwable throwable) {
+            extractError = throwable;
+        }
+        final IncomingMessage incomingMessage = new IncomingMessage(message, payloadBody, converter);
+        List<Class> actionClasses = actionsRoster.getActionClasses(message.getEvent());
+        for (Class actionClass : actionClasses) {
             ActionHolder holder = ActionHolder.create((createActionInstance(actionClass)));
+            if (extractError != null) {
+                callback.onFail(holder, new AsyncServiceException(extractError));
+                continue;
+            }
             AsyncActionWrapper actionWrapper = getAsyncActionWrapper(holder);
             try {
-                actionWrapper.fillPayload(body, converter);
+                actionWrapper.setPayload(incomingMessage.getPayloadAs(actionWrapper.getPayloadFieldType()));
             } catch (ConverterException e) {
                 callback.onFail(holder, new AsyncServiceException(e));
+                continue;
             }
-            if (synchronizer.contains(event)) {
-                for (AsyncActionWrapper wrapper : synchronizer.sync(event, actionWrapper.action, new AsyncActionSynchronizer.Predicate() {
-                    @Override public boolean call(AsyncActionWrapper wrapper, Object responseAction) {
-                        try {
-                            return wrapper.fillResponse(responseAction);
-                        } catch (ConverterException e) {
-                            callback.onFail(wrapper.holder, new AsyncServiceException(e));
-                        }
-                        return false;
-                    }
-                })) {
-                    callback.onSuccess(wrapper.holder);
+            callback.onSuccess(holder);
+        }
+        for (AsyncActionWrapper wrapper : synchronizer.sync(new AsyncActionSynchronizer.Callback() {
+            @Override public boolean call(AsyncActionWrapper wrapper) {
+                WaitingAction action = new WaitingAction(wrapper.message, wrapper.getPayload(),
+                        wrapper.getPayloadFieldType(), wrapper.isBytesPayload());
+                return protocol.responseMatcher().match(action, incomingMessage);
+            }
+        })) {
+            try {
+                if (extractError != null) {
+                    throw extractError;
                 }
-            } else {
-                callback.onSuccess(holder);
+                wrapper.setResponse(incomingMessage.getPayloadAs(wrapper.getResponseFieldType()));
+                callback.onSuccess(wrapper.holder);
+            } catch (Throwable t) {
+                callback.onFail(wrapper.holder, new AsyncServiceException(t));
             }
         }
+        incomingMessage.destroy();
     }
 
+    @SuppressWarnings("FieldCanBeLocal")
     private final AsyncClient.Callback clientCallback = new AsyncClient.Callback() {
 
         private QueuePoller queuePoller = new QueuePoller();
@@ -256,20 +291,8 @@ final public class AsyncActionService extends ActionService {
             callback.onFail(ActionHolder.create(new ErrorAsyncAction(t)), new AsyncServiceException("Server sent error", t));
         }
 
-        @Override public void onMessage(String event, String string) {
-            BytesArrayBody body = null;
-            if (string != null) {
-                body = new StringBody(string);
-            }
-            onMessageReceived(event, body);
-        }
-
-        @Override public void onMessage(String event, byte[] bytes) {
-            BytesArrayBody body = null;
-            if (bytes != null) {
-                body = new BytesArrayBody(null, bytes);
-            }
-            onMessageReceived(event, body);
+        @Override public void onMessage(Message message) {
+            onMessageReceived(message);
         }
     };
 
@@ -291,6 +314,21 @@ final public class AsyncActionService extends ActionService {
             callback.onFail(wrapper.holder, new AsyncServiceException("Action " + wrapper.action + " hasn't got a response.", exception));
         }
     };
+
+    private BytesArrayBody extractPayload(Message message) throws Throwable {
+        switch (message.getType()) {
+            case BINARY: {
+                byte[] payload = protocol.binaryPayloadConverter().extractPayload(message);
+                return new BytesArrayBody(null, payload);
+            }
+            case TEXT: {
+                String payload = protocol.textPayloadConverter().extractPayload(message);
+                return new StringBody(payload);
+            }
+            default:
+                throw new IllegalStateException("Message type is unknown");
+        }
+    }
 
     private <A> AsyncActionWrapper getAsyncActionWrapper(ActionHolder<A> holder) {
         AsyncActionWrapper wrapper = actionWrapperFactory.make(holder);

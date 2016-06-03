@@ -2,14 +2,24 @@ package io.techery.janet.async.sample;
 
 import com.google.gson.Gson;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.util.concurrent.atomic.AtomicInteger;
+
 import io.techery.janet.ActionPipe;
 import io.techery.janet.AsyncActionService;
 import io.techery.janet.Janet;
+import io.techery.janet.async.protocol.AsyncProtocol;
+import io.techery.janet.async.model.IncomingMessage;
+import io.techery.janet.async.model.Message;
+import io.techery.janet.async.protocol.PayloadConverter;
+import io.techery.janet.async.protocol.ResponseMatcher;
+import io.techery.janet.async.model.WaitingAction;
 import io.techery.janet.async.actions.ConnectAsyncAction;
 import io.techery.janet.async.sample.action.IncomingAloneAction;
 import io.techery.janet.async.sample.action.RequestResponseAction;
 import io.techery.janet.async.sample.action.RequestResponseTimeoutAction;
-import io.techery.janet.async.sample.model.Body;
 import io.techery.janet.gson.GsonConverter;
 import io.techery.janet.helper.ActionStateSubscriber;
 import io.techery.janet.nkzawa.SocketIO;
@@ -17,9 +27,49 @@ import rx.schedulers.Schedulers;
 
 public class AsyncSample {
 
+    private static final PayloadConverter<String> payloadConverter = new PayloadConverter<String>() {
+
+        private AtomicInteger id = new AtomicInteger();
+
+        @Override public String extractPayload(Message message) throws Throwable {
+            String text = message.getDataAsText();
+            JSONObject json = new JSONObject(text);
+            return json.getString("data");
+        }
+
+        @Override public Message createMessage(String event, String payload) throws Throwable {
+            JSONObject json = new JSONObject();
+            json.put("id", id.incrementAndGet());
+            json.put("data", payload);
+            return Message.createTextMessage(event, json.toString());
+        }
+    };
+
+    private static final ResponseMatcher responseMatcher = new ResponseMatcher() {
+        @Override public boolean match(WaitingAction waitingAction, IncomingMessage incomingMessage) {
+            if (!waitingAction.isBinaryPayload()
+                    && waitingAction.getMessage().getEvent().equals("event_from_client_to_server")
+                    && incomingMessage.getMessage().getEvent().equals("event_from_server_to_client_as_response")) {
+                try {
+                    JSONObject requestJson = new JSONObject(waitingAction.getMessage().getDataAsText());
+                    JSONObject responseJson = new JSONObject(incomingMessage.getMessage().getDataAsText());
+                    return requestJson.getInt("id") == responseJson.getInt("id");
+                } catch (JSONException e) {
+                    return false;
+                }
+            }
+            return false;
+        }
+    };
+
     public static void main(String... args) throws Exception {
+        AsyncProtocol protocol = new AsyncProtocol.Builder()
+                .setTextPayloadConverter(payloadConverter)
+                .setResponseMatcher(responseMatcher)
+                .build();
+
         Janet janet = new Janet.Builder()
-                .addService(new AsyncActionService("http://localhost:3000", new SocketIO(), new GsonConverter(new Gson())))
+                .addService(new AsyncActionService("http://localhost:3000", new SocketIO(), protocol, new GsonConverter(new Gson())))
                 .build();
 
         // Create connection pipe
@@ -56,19 +106,15 @@ public class AsyncSample {
         connectionPipe.observeSuccess()
                 .subscribe(ActionPipe -> {
                     RequestResponseAction action = new RequestResponseAction();
-                    action.body = new Body();
-                    action.body.id = 1;
-                    action.body.data = "client_data";
+                    action.body = "client_data";
                     sendReceivePipe.send(action);
                 });
 
         connectionPipe.observeSuccess()
                 .subscribe(ActionPipe -> {
                     RequestResponseTimeoutAction action = new RequestResponseTimeoutAction();
-                    action.data = new Body();
-                    action.data.id = 100500;
-                    action.data.data = "client_data";
-                    timeoutPipe.send(action);
+                    action.data = "client_data";
+                    //                    timeoutPipe.send(action);
                 });
 
         // Establish connection

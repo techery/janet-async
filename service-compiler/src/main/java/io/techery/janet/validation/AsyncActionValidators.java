@@ -6,9 +6,8 @@ import java.util.List;
 import java.util.Set;
 
 import io.techery.janet.AsyncActionClass;
-import io.techery.janet.async.annotations.PendingResponse;
 import io.techery.janet.async.annotations.Payload;
-import io.techery.janet.compiler.utils.validation.AnnotationQuantityValidator;
+import io.techery.janet.async.annotations.Response;
 import io.techery.janet.compiler.utils.validation.FieldsModifiersValidator;
 import io.techery.janet.compiler.utils.validation.ValidationError;
 import io.techery.janet.compiler.utils.validation.Validator;
@@ -20,11 +19,11 @@ public class AsyncActionValidators implements Validator<AsyncActionClass> {
     public AsyncActionValidators() {
         validators = new ArrayList<Validator<AsyncActionClass>>();
         validators.add(new FieldsModifiersValidator<AsyncActionClass>());
+        validators.add(new AnnotationQuantityValidator(Payload.class, 1));
+        validators.add(new AnnotationQuantityValidator(Response.class, 1));
+        validators.add(new ParentsValidator());
         validators.add(new PayloadValidator());
         validators.add(new TypeIncomingValidator());
-        validators.add(new PendingResponseValidator());
-        validators.add(new AnnotationQuantityValidator<AsyncActionClass>(Payload.class, 1));
-        validators.add(new AnnotationQuantityValidator<AsyncActionClass>(PendingResponse.class, 1));
     }
 
     @Override
