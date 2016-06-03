@@ -105,6 +105,14 @@ final public class AsyncActionService extends ActionService {
         }
     }
 
+    private <A> AsyncActionWrapper getAsyncActionWrapper(ActionHolder<A> holder) {
+        AsyncActionWrapper wrapper = actionWrapperFactory.make(holder);
+        if (wrapper == null) {
+            throw new JanetInternalException(ERROR_GENERATOR);
+        }
+        return wrapper;
+    }
+
     @Override protected <A> void cancel(ActionHolder<A> holder) {
         AsyncActionWrapper wrapper = getAsyncActionWrapper(holder);
         runningActions.remove(holder.action());
