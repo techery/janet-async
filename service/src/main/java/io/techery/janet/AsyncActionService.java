@@ -114,10 +114,7 @@ final public class AsyncActionService extends ActionService {
     }
 
     @Override protected <A> void cancel(ActionHolder<A> holder) {
-        AsyncActionWrapper wrapper = actionWrapperFactory.make(holder);
-        if (wrapper == null) {
-            throw new JanetInternalException(ERROR_GENERATOR);
-        }
+        AsyncActionWrapper wrapper = getAsyncActionWrapper(holder);
         runningActions.remove(holder.action());
         if (wrapper.getResponseEvent() != null) {
             synchronizer.remove(wrapper);
