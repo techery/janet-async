@@ -11,8 +11,8 @@ import io.techery.janet.async.actions.ConnectAsyncAction;
 import io.techery.janet.async.actions.DisconnectAsyncAction;
 import io.techery.janet.async.actions.ErrorAsyncAction;
 import io.techery.janet.async.annotations.AsyncAction;
-import io.techery.janet.async.annotations.PendingResponse;
 import io.techery.janet.async.annotations.Payload;
+import io.techery.janet.async.annotations.PendingResponse;
 import io.techery.janet.async.exception.AsyncServiceException;
 import io.techery.janet.async.exception.PendingResponseException;
 import io.techery.janet.body.ActionBody;
@@ -25,7 +25,7 @@ import io.techery.janet.converter.ConverterException;
  * Provide support async protocols. {@link AsyncActionService} performs actions with annotation
  * {@linkplain AsyncAction @AsyncAction}. Every action is async message that contains message data as a field annotated
  * with {@linkplain Payload @Payload}.
- * <p>
+ * <p/>
  * Also {@linkplain AsyncActionService} has algorithm to synchronize outcoming and incoming messages.
  * Action could wait for response and store it to field with annotation {@linkplain PendingResponse @PendingResponse}.
  * Type of that field must be a class of incoming action. To link action with its response set class in the annotation implemented by
@@ -103,14 +103,6 @@ final public class AsyncActionService extends ActionService {
         } finally {
             runningActions.remove(holder.action());
         }
-    }
-
-    private <A> AsyncActionWrapper getAsyncActionWrapper(ActionHolder<A> holder) {
-        AsyncActionWrapper wrapper = actionWrapperFactory.make(holder);
-        if (wrapper == null) {
-            throw new JanetInternalException(ERROR_GENERATOR);
-        }
-        return wrapper;
     }
 
     @Override protected <A> void cancel(ActionHolder<A> holder) {
