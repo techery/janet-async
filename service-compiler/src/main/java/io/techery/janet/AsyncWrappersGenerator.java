@@ -3,6 +3,7 @@ package io.techery.janet;
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.ParameterizedTypeName;
+import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
 import com.squareup.javapoet.TypeVariableName;
 
@@ -14,6 +15,8 @@ import javax.lang.model.element.Element;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.TypeParameterElement;
+import javax.lang.model.type.TypeKind;
+import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Types;
 
 import io.techery.janet.async.PendingResponseMatcher;
@@ -136,7 +139,7 @@ public class AsyncWrappersGenerator extends Generator<AsyncActionClass> {
         if (actionClass.getResponseInfo() != null) {
             builder.beginControlFlow("if(responseMatcher.match(this.action, responseAction))");
             builder.addStatement("action.$L = ($L)responseAction", actionClass.getResponseInfo().responseField,
-                    ClassName.get((TypeElement) typeUtils.asElement(actionClass.getResponseInfo().responseField.asType())));
+                    getElementTypeName(actionClass, actionClass.getResponseInfo().responseField));
             builder.addStatement("return true");
             builder.endControlFlow();
         } else {
@@ -157,7 +160,7 @@ public class AsyncWrappersGenerator extends Generator<AsyncActionClass> {
         builder.addStatement("action.$L = null", payloadField);
         builder.addStatement("return");
         builder.endControlFlow();
-        ClassName payloadTypeName = ClassName.get((TypeElement) typeUtils.asElement(payloadField.asType()));
+        TypeName payloadTypeName = getElementTypeName(actionClass, payloadField);
         if (actionClass.isBytesPayload()) {
             builder.addStatement("action.$L = ($T) body", payloadField, payloadTypeName);
         } else {
@@ -180,6 +183,33 @@ public class AsyncWrappersGenerator extends Generator<AsyncActionClass> {
         }
         return builder.build();
     }
+
+    private TypeName getElementTypeName(AsyncActionClass actionClass, Element element) {
+        if (element.asType().getKind() == TypeKind.TYPEVAR) {
+            TypeParameterElement typeElement = (TypeParameterElement) typeUtils.asElement(element.asType());
+
+            ParameterizedTypeName genericElementTypeName = (ParameterizedTypeName) TypeName.get(typeElement.getGenericElement()
+                    .asType());
+
+            int typeArgIndex;
+            for (typeArgIndex = 0; typeArgIndex < genericElementTypeName.typeArguments.size(); typeArgIndex++) {
+                if (genericElementTypeName.typeArguments.get(typeArgIndex).toString()
+                        .equals(element.asType().toString())) {
+                    break;
+                }
+            }
+
+            TypeMirror superClassType = actionClass.getTypeElement().getSuperclass();
+            while (!TypeName.get(superClassType).toString().startsWith(genericElementTypeName.rawType.toString())) {
+                TypeElement superClassElement = (TypeElement) typeUtils.asElement(superClassType);
+                superClassType = superClassElement.getSuperclass();
+            }
+            return ((ParameterizedTypeName) TypeName.get(superClassType)).typeArguments.get(typeArgIndex);
+        } else {
+            return ClassName.get((TypeElement) typeUtils.asElement(element.asType()));
+        }
+    }
+
 
     private static Iterable<TypeVariableName> getTypeVariables(TypeElement element) {
         List<TypeVariableName> typeVariables = new ArrayList<TypeVariableName>();
