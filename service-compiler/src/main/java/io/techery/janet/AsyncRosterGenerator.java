@@ -1,5 +1,6 @@
 package io.techery.janet;
 
+import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeSpec;
@@ -41,7 +42,7 @@ public class AsyncRosterGenerator extends Generator<AsyncActionClass> {
                 event = actionClass.getEvent();
                 constructorBuilder.addStatement("map.put($S, new $T())", event, ParameterizedTypeName.get(ArrayList.class, Class.class));
             }
-            constructorBuilder.addStatement("map.get($S).add($T.class)", event, actionClass.getTypeElement());
+            constructorBuilder.addStatement("map.get($S).add($T.class)", event, ClassName.get(actionClass.getTypeElement()));
         }
         classBuilder.addMethod(constructorBuilder.build());
         saveClass(AsyncActionService.class.getPackage().getName(), classBuilder.build());

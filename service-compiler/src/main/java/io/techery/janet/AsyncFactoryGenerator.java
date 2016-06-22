@@ -34,9 +34,9 @@ public class AsyncFactoryGenerator extends Generator<AsyncActionClass> {
         makeMethodBuilder.addStatement("Class actionClass = holder.action().getClass()");
 
         for (AsyncActionClass actionClass : actionClasses) {
-            makeMethodBuilder.beginControlFlow("if(actionClass == $T.class)", actionClass.getTypeElement());
-            makeMethodBuilder.addStatement(" return new $T((ActionHolder<$T>)holder)", ClassName.bestGuess(actionClass.getFullWrapperName()), actionClass
-                    .getTypeElement());
+            ClassName actionTypeName = ClassName.get(actionClass.getTypeElement());
+            makeMethodBuilder.beginControlFlow("if(actionClass == $T.class)", actionTypeName);
+            makeMethodBuilder.addStatement(" return new $T((ActionHolder<$T>)holder)", ClassName.bestGuess(actionClass.getFullWrapperName()), actionTypeName);
             makeMethodBuilder.endControlFlow();
         }
         makeMethodBuilder.addStatement("return null");
