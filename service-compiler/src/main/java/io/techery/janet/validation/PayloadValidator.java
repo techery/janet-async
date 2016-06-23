@@ -12,8 +12,8 @@ public class PayloadValidator implements Validator<AsyncActionClass> {
 
     @Override public Set<ValidationError> validate(AsyncActionClass value) {
         Set<ValidationError> errors = new HashSet<ValidationError>();
-        if (value.getAllAnnotatedElements(Payload.class).isEmpty()) {
-            errors.add(new ValidationError("Action must have a payload field", value.getTypeElement()));
+        if (value.isIncoming() && value.getAllAnnotatedElements(Payload.class).isEmpty()) {
+            errors.add(new ValidationError("Incoming action must have a payload field", value.getTypeElement()));
         }
         return errors;
     }

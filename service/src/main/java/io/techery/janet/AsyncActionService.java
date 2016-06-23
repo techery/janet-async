@@ -28,7 +28,7 @@ import io.techery.janet.converter.ConverterException;
  * Provide support async protocols. {@link AsyncActionService} performs actions with annotation
  * {@linkplain AsyncAction @AsyncAction}. Every action is async message that contains message data as a field annotated
  * with {@linkplain Payload @Payload}.
- * <p/>
+ * <p></p>
  * Also {@linkplain AsyncActionService} has algorithm to synchronize outcoming and incoming messages.
  * Action could wait for response and store it to field with annotation {@linkplain Response @Response}.
  * Type of that field must be a class of incoming action. To link action with its response set class in the annotation implemented by
@@ -132,9 +132,9 @@ final public class AsyncActionService extends ActionService {
             Message message;
             byte[] content = payloadBody.getContent();
             if (wrapper.isBytesPayload()) {
-                message = protocol.binaryPayloadConverter().createMessage(wrapper.getEvent(), content);
+                message = protocol.binaryMessageRule().createMessage(wrapper.getEvent(), content);
             } else {
-                message = protocol.textPayloadConverter().createMessage(wrapper.getEvent(), new String(content));
+                message = protocol.textMessageRule().createMessage(wrapper.getEvent(), new String(content));
             }
             wrapper.setMessage(message);
             client.send(message);
@@ -194,11 +194,6 @@ final public class AsyncActionService extends ActionService {
     }
 
     private void onMessageReceived(Message message) {
-        if (!actionsRoster.containsEvent(message.getEvent())) {
-            System.err.println(String.format("Received sync message %s is not defined by any action :(. The message contains body %s", message
-                    .getEvent(), message.getDataAsText()));
-            return;
-        }
         Throwable extractError = null;
         BytesArrayBody payloadBody = null;
         try {
@@ -318,11 +313,11 @@ final public class AsyncActionService extends ActionService {
     private BytesArrayBody extractPayload(Message message) throws Throwable {
         switch (message.getType()) {
             case BINARY: {
-                byte[] payload = protocol.binaryPayloadConverter().extractPayload(message);
+                byte[] payload = protocol.binaryMessageRule().handleMessage(message);
                 return new BytesArrayBody(null, payload);
             }
             case TEXT: {
-                String payload = protocol.textPayloadConverter().extractPayload(message);
+                String payload = protocol.textMessageRule().handleMessage(message);
                 return new StringBody(payload);
             }
             default:

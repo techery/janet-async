@@ -13,7 +13,7 @@ import io.techery.janet.Janet;
 import io.techery.janet.async.protocol.AsyncProtocol;
 import io.techery.janet.async.model.IncomingMessage;
 import io.techery.janet.async.model.Message;
-import io.techery.janet.async.protocol.PayloadConverter;
+import io.techery.janet.async.protocol.MessageRule;
 import io.techery.janet.async.protocol.ResponseMatcher;
 import io.techery.janet.async.model.WaitingAction;
 import io.techery.janet.async.actions.ConnectAsyncAction;
@@ -27,11 +27,13 @@ import rx.schedulers.Schedulers;
 
 public class AsyncSample {
 
-    private static final PayloadConverter<String> payloadConverter = new PayloadConverter<String>() {
+
+    // 1
+    private static final MessageRule<String> MESSAGE_RULE = new MessageRule<String>() {
 
         private AtomicInteger id = new AtomicInteger();
 
-        @Override public String extractPayload(Message message) throws Throwable {
+        @Override public String handleMessage(Message message) throws Throwable {
             String text = message.getDataAsText();
             JSONObject json = new JSONObject(text);
             return json.getString("data");
@@ -62,9 +64,47 @@ public class AsyncSample {
         }
     };
 
+    //
+
+    //2
+    private static final MessageRule<String> MESSAGE_RULE_2 = new MessageRule<String>() {
+
+        private AtomicInteger id = new AtomicInteger();
+
+        @Override public String handleMessage(Message message) throws Throwable {
+            String text = message.getDataAsText();
+            JSONObject json = new JSONObject(text);
+            return json.getString("data");
+        }
+
+        @Override public Message createMessage(String event, String payload) throws Throwable {
+            JSONObject json = new JSONObject();
+            json.put("id", id.incrementAndGet());
+            json.put("data", payload);
+            return Message.createTextMessage(event, json.toString());
+        }
+    };
+
+    private static final ResponseMatcher responseMatcher2 = new ResponseMatcher() {
+        @Override public boolean match(WaitingAction waitingAction, IncomingMessage incomingMessage) {
+            if (!waitingAction.isBinaryPayload()
+                    && waitingAction.getMessage().getEvent().equals("event_from_client_to_server")
+                    && incomingMessage.getMessage().getEvent().equals("event_from_server_to_client_as_response")) {
+                try {
+                    JSONObject requestJson = new JSONObject(waitingAction.getMessage().getDataAsText());
+                    JSONObject responseJson = new JSONObject(incomingMessage.getMessage().getDataAsText());
+                    return requestJson.getInt("id") == responseJson.getInt("id");
+                } catch (JSONException e) {
+                    return false;
+                }
+            }
+            return false;
+        }
+    };
+
     public static void main(String... args) throws Exception {
         AsyncProtocol protocol = new AsyncProtocol.Builder()
-                .setTextPayloadConverter(payloadConverter)
+                .setTextMessageRule(MESSAGE_RULE)
                 .setResponseMatcher(responseMatcher)
                 .build();
 

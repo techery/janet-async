@@ -4,22 +4,22 @@ import io.techery.janet.async.model.Message;
 
 public final class AsyncProtocol {
 
-    private final PayloadConverter<String> textPayloadConverter;
-    private final PayloadConverter<byte[]> binaryPayloadConverter;
+    private final MessageRule<String> textMessageRule;
+    private final MessageRule<byte[]> binaryMessageRule;
     private final ResponseMatcher responseMatcher;
 
-    private AsyncProtocol(PayloadConverter<String> textPayloadConverter, PayloadConverter<byte[]> binaryPayloadConverter, ResponseMatcher responseMatcher) {
-        this.textPayloadConverter = textPayloadConverter;
-        this.binaryPayloadConverter = binaryPayloadConverter;
+    private AsyncProtocol(MessageRule<String> textMessageRule, MessageRule<byte[]> binaryMessageRule, ResponseMatcher responseMatcher) {
+        this.textMessageRule = textMessageRule;
+        this.binaryMessageRule = binaryMessageRule;
         this.responseMatcher = responseMatcher;
     }
 
-    public PayloadConverter<String> textPayloadConverter() {
-        return textPayloadConverter;
+    public MessageRule<String> textMessageRule() {
+        return textMessageRule;
     }
 
-    public PayloadConverter<byte[]> binaryPayloadConverter() {
-        return binaryPayloadConverter;
+    public MessageRule<byte[]> binaryMessageRule() {
+        return binaryMessageRule;
     }
 
     public ResponseMatcher responseMatcher() {
@@ -27,23 +27,23 @@ public final class AsyncProtocol {
     }
 
     public final static class Builder {
-        private PayloadConverter<String> textPayloadConverter = new SimpleTextPayloadConverter();
-        private PayloadConverter<byte[]> binaryPayloadConverter = new SimpleBinaryPayloadConverter();
+        private MessageRule<String> textMessageRule = new SimpleTextMessageRule();
+        private MessageRule<byte[]> binaryMessageRule = new SimpleBinaryMessageRule();
         private ResponseMatcher responseMatcher;
 
-        public Builder setTextPayloadConverter(PayloadConverter<String> converter) {
+        public Builder setTextMessageRule(MessageRule<String> converter) {
             if (converter == null) {
                 throw new IllegalArgumentException("converter == null");
             }
-            this.textPayloadConverter = converter;
+            this.textMessageRule = converter;
             return this;
         }
 
-        public Builder setBinaryPayloadConverter(PayloadConverter<byte[]> converter) {
+        public Builder setBinaryMessageRule(MessageRule<byte[]> converter) {
             if (converter == null) {
                 throw new IllegalArgumentException("converter == null");
             }
-            this.binaryPayloadConverter = converter;
+            this.binaryMessageRule = converter;
             return this;
         }
 
@@ -56,13 +56,13 @@ public final class AsyncProtocol {
         }
 
         public AsyncProtocol build() {
-            return new AsyncProtocol(textPayloadConverter, binaryPayloadConverter, responseMatcher);
+            return new AsyncProtocol(textMessageRule, binaryMessageRule, responseMatcher);
         }
     }
 
-    private static class SimpleTextPayloadConverter implements PayloadConverter<String> {
+    private static class SimpleTextMessageRule implements MessageRule<String> {
 
-        @Override public String extractPayload(Message message) {
+        @Override public String handleMessage(Message message) {
             return message.getDataAsText();
         }
 
@@ -71,8 +71,8 @@ public final class AsyncProtocol {
         }
     }
 
-    private static class SimpleBinaryPayloadConverter implements PayloadConverter<byte[]> {
-        @Override public byte[] extractPayload(Message message) {
+    private static class SimpleBinaryMessageRule implements MessageRule<byte[]> {
+        @Override public byte[] handleMessage(Message message) {
             return message.getDataAsBinary();
         }
 
