@@ -18,6 +18,7 @@ import javax.lang.model.element.Element;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
+import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 
 import io.techery.janet.async.actions.SystemAction;
@@ -30,6 +31,7 @@ import io.techery.janet.validation.AsyncActionValidators;
 public class JanetAsyncProcessor extends AbstractProcessor {
     private Elements elementUtils;
     private Messager messager;
+    private Types typeUtils;
     private ClassValidator classValidator;
     private AsyncActionValidators asyncActionValidators;
     private AsyncWrappersGenerator wrappersGenerator;
@@ -41,9 +43,10 @@ public class JanetAsyncProcessor extends AbstractProcessor {
         super.init(processingEnv);
         elementUtils = processingEnv.getElementUtils();
         messager = processingEnv.getMessager();
+        typeUtils = processingEnv.getTypeUtils();
         classValidator = new ClassValidator(AsyncAction.class);
         asyncActionValidators = new AsyncActionValidators();
-        wrappersGenerator = new AsyncWrappersGenerator(processingEnv.getFiler());
+        wrappersGenerator = new AsyncWrappersGenerator(processingEnv.getFiler(), typeUtils);
         factoryGenerator = new AsyncFactoryGenerator(processingEnv.getFiler());
         rosterGenerator = new AsyncRosterGenerator(processingEnv.getFiler());
     }
@@ -81,7 +84,7 @@ public class JanetAsyncProcessor extends AbstractProcessor {
                 }
             }
             if (isSystem) continue;
-            AsyncActionClass actionClass = new AsyncActionClass(elementUtils, typeElement);
+            AsyncActionClass actionClass = new AsyncActionClass(elementUtils, typeUtils, typeElement);
             errors.addAll(asyncActionValidators.validate(actionClass));
             if (!errors.isEmpty()) {
                 printErrors(errors);

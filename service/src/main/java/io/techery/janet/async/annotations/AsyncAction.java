@@ -13,7 +13,9 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
 @Retention(RUNTIME)
 public @interface AsyncAction {
 
-    /**event**/
+    /**
+     * @return message event
+     * **/
     String value();
 
     boolean incoming() default false; //if true the action will be added to roster
