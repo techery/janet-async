@@ -1,6 +1,10 @@
 apply plugin: 'java'
 apply from: rootProject.file('gradle/plugins/maven-simple.gradle')
 
+repositories {
+    jcenter()
+}
+
 compileJava {
     sourceCompatibility = 1.6
     targetCompatibility = 1.6

@@ -15,7 +15,7 @@ public @interface AsyncAction {
 
     /**
      * @return message event
-     * **/
+     **/
     String value();
 
     boolean incoming() default false; //if true the action will be added to roster

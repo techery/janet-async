@@ -4,13 +4,13 @@ import com.github.nkzawa.emitter.Emitter;
 import com.github.nkzawa.socketio.client.IO;
 import com.github.nkzawa.socketio.client.Socket;
 
-import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.HashSet;
 import java.util.Set;
 
 import io.techery.janet.AsyncClient;
+import io.techery.janet.async.model.Message;
 
 public class SocketIO extends AsyncClient {
 
@@ -73,13 +73,14 @@ public class SocketIO extends AsyncClient {
         });
         for (final String event : events) {
             socket.on(event, new Emitter.Listener() {
-                @Override public void call(Object... args) {
+                @Override
+                public void call(Object... args) {
+                    String data = null;
                     if (args.length > 0) {
                         Object value = args[0];
-                        callback.onMessage(event, String.valueOf(value));
-                    } else {
-                        callback.onMessage(event, (String) null);
+                        data = String.valueOf(value);
                     }
+                    callback.onMessage(Message.createTextMessage(event, data));
                 }
             });
         }
@@ -97,21 +98,17 @@ public class SocketIO extends AsyncClient {
         }
     }
 
-    @Override protected void send(String event, String payload) throws Throwable {
-        if (!isConnected()) return;
-        //
-        Object obj;
-        try {
-            obj = new JSONObject(payload);
-        } catch (JSONException e) {
-            obj = payload;
-        }
-        socket.emit(event, obj);
-    }
-
-    @Override protected void send(String event, byte[] payload) throws Throwable {
+    @Override protected void send(Message message) throws Throwable {
         if (isConnected()) {
-            socket.emit(event, new Object[]{payload});
+            switch (message.getType()) {
+                case TEXT: {
+                    socket.emit(message.getEvent(), new JSONObject(message.getDataAsText()));
+                    break;
+                }
+                case BINARY: {
+                    socket.emit(message.getEvent(), new Object[]{message.getDataAsBinary()});
+                }
+            }
         }
     }
 

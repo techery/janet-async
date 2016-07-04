@@ -1,16 +1,15 @@
 package io.techery.janet;
 
+import java.lang.reflect.Type;
 import java.util.concurrent.ScheduledFuture;
 
-import io.techery.janet.body.ActionBody;
-import io.techery.janet.body.BytesArrayBody;
-import io.techery.janet.converter.Converter;
-import io.techery.janet.converter.ConverterException;
+import io.techery.janet.async.model.ProtocolAction;
 
 public abstract class AsyncActionWrapper<A> {
 
     final ActionHolder<A> holder;
     protected final A action;
+    protected ProtocolAction protocolAction;
     private ScheduledFuture scheduledFuture;
 
     protected AsyncActionWrapper(ActionHolder<A> holder) {
@@ -18,12 +17,21 @@ public abstract class AsyncActionWrapper<A> {
         this.action = holder.action();
     }
 
-    protected abstract boolean isBytesPayload();
     protected abstract String getEvent();
-    protected abstract ActionBody getPayload(Converter converter) throws ConverterException;
-    protected abstract String getResponseEvent();
-    protected abstract boolean fillResponse(Object responseAction);
-    protected abstract void fillPayload(BytesArrayBody body, Converter converter) throws ConverterException;
+    protected abstract boolean isBytesPayload();
+    protected abstract Type getPayloadFieldType();
+    protected abstract Object getPayload();
+    protected abstract void setPayload(Object payload);
+    protected abstract Type getResponseFieldType();
+    protected abstract void setResponse(Object response);
+
+    protected long getResponseTimeout() {
+        return AsyncActionSynchronizer.PENDING_TIMEOUT;
+    }
+
+    public boolean awaitsResponse() {
+        return getResponseFieldType() != null;
+    }
 
     public void cancelExpireFuture() {
         if (scheduledFuture != null) {
@@ -36,8 +44,8 @@ public abstract class AsyncActionWrapper<A> {
         this.scheduledFuture = scheduledFuture;
     }
 
-    protected long getResponseTimeout() {
-        return AsyncActionSynchronizer.PENDING_TIMEOUT;
+    public void setProtocolAction(ProtocolAction protocolAction) {
+        this.protocolAction = protocolAction;
     }
 
     @Override public boolean equals(Object o) {
