@@ -2,7 +2,6 @@ package io.techery.janet.async.sample;
 
 import com.google.gson.Gson;
 
-import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.concurrent.atomic.AtomicInteger;
@@ -10,13 +9,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import io.techery.janet.ActionPipe;
 import io.techery.janet.AsyncActionService;
 import io.techery.janet.Janet;
-import io.techery.janet.async.protocol.AsyncProtocol;
-import io.techery.janet.async.model.IncomingMessage;
+import io.techery.janet.async.actions.ConnectAsyncAction;
 import io.techery.janet.async.model.Message;
+import io.techery.janet.async.model.ProtocolAction;
+import io.techery.janet.async.protocol.AsyncProtocol;
 import io.techery.janet.async.protocol.MessageRule;
 import io.techery.janet.async.protocol.ResponseMatcher;
-import io.techery.janet.async.model.WaitingAction;
-import io.techery.janet.async.actions.ConnectAsyncAction;
 import io.techery.janet.async.sample.action.IncomingAloneAction;
 import io.techery.janet.async.sample.action.RequestResponseAction;
 import io.techery.janet.async.sample.action.RequestResponseTimeoutAction;
@@ -27,76 +25,38 @@ import rx.schedulers.Schedulers;
 
 public class AsyncSample {
 
+    private static String KEY_ID = "id";
+    private static String KEY_DATA = "data";
 
     // 1
-    private static final MessageRule<String> MESSAGE_RULE = new MessageRule<String>() {
+    private static final MessageRule MESSAGE_RULE = new MessageRule() {
 
         private AtomicInteger id = new AtomicInteger();
 
-        @Override public String handleMessage(Message message) throws Throwable {
+        @Override public ProtocolAction handleMessage(Message message) throws Throwable {
             String text = message.getDataAsText();
             JSONObject json = new JSONObject(text);
-            return json.getString("data");
+            return ProtocolAction.of(message)
+                    .payload(json.getString(KEY_DATA))
+                    .metadata(KEY_ID, json.getInt(KEY_ID));
         }
 
-        @Override public Message createMessage(String event, String payload) throws Throwable {
+        @Override public Message createMessage(ProtocolAction action) throws Throwable {
             JSONObject json = new JSONObject();
-            json.put("id", id.incrementAndGet());
-            json.put("data", payload);
-            return Message.createTextMessage(event, json.toString());
+            json.put(KEY_ID, id.incrementAndGet());
+            json.put(KEY_DATA, action.getPayloadAsString());
+            //save id to metadata for response matching
+            action.metadata(KEY_ID, id.get());
+            return Message.createTextMessage(action.getEvent(), json.toString());
         }
     };
 
     private static final ResponseMatcher responseMatcher = new ResponseMatcher() {
-        @Override public boolean match(WaitingAction waitingAction, IncomingMessage incomingMessage) {
+        @Override public boolean match(ProtocolAction waitingAction, ProtocolAction incomingAction) {
             if (!waitingAction.isBinaryPayload()
-                    && waitingAction.getMessage().getEvent().equals("event_from_client_to_server")
-                    && incomingMessage.getMessage().getEvent().equals("event_from_server_to_client_as_response")) {
-                try {
-                    JSONObject requestJson = new JSONObject(waitingAction.getMessage().getDataAsText());
-                    JSONObject responseJson = new JSONObject(incomingMessage.getMessage().getDataAsText());
-                    return requestJson.getInt("id") == responseJson.getInt("id");
-                } catch (JSONException e) {
-                    return false;
-                }
-            }
-            return false;
-        }
-    };
-
-    //
-
-    //2
-    private static final MessageRule<String> MESSAGE_RULE_2 = new MessageRule<String>() {
-
-        private AtomicInteger id = new AtomicInteger();
-
-        @Override public String handleMessage(Message message) throws Throwable {
-            String text = message.getDataAsText();
-            JSONObject json = new JSONObject(text);
-            return json.getString("data");
-        }
-
-        @Override public Message createMessage(String event, String payload) throws Throwable {
-            JSONObject json = new JSONObject();
-            json.put("id", id.incrementAndGet());
-            json.put("data", payload);
-            return Message.createTextMessage(event, json.toString());
-        }
-    };
-
-    private static final ResponseMatcher responseMatcher2 = new ResponseMatcher() {
-        @Override public boolean match(WaitingAction waitingAction, IncomingMessage incomingMessage) {
-            if (!waitingAction.isBinaryPayload()
-                    && waitingAction.getMessage().getEvent().equals("event_from_client_to_server")
-                    && incomingMessage.getMessage().getEvent().equals("event_from_server_to_client_as_response")) {
-                try {
-                    JSONObject requestJson = new JSONObject(waitingAction.getMessage().getDataAsText());
-                    JSONObject responseJson = new JSONObject(incomingMessage.getMessage().getDataAsText());
-                    return requestJson.getInt("id") == responseJson.getInt("id");
-                } catch (JSONException e) {
-                    return false;
-                }
+                    && waitingAction.getEvent().equals("event_from_client_to_server")
+                    && incomingAction.getEvent().equals("event_from_server_to_client_as_response")) {
+                return waitingAction.getMetadata(KEY_ID).equals(incomingAction.getMetadata(KEY_ID));
             }
             return false;
         }
@@ -104,7 +64,7 @@ public class AsyncSample {
 
     public static void main(String... args) throws Exception {
         AsyncProtocol protocol = new AsyncProtocol.Builder()
-                .setTextMessageRule(MESSAGE_RULE)
+                .setMessageRule(MESSAGE_RULE)
                 .setResponseMatcher(responseMatcher)
                 .build();
 

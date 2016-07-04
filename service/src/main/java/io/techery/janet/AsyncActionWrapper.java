@@ -3,13 +3,13 @@ package io.techery.janet;
 import java.lang.reflect.Type;
 import java.util.concurrent.ScheduledFuture;
 
-import io.techery.janet.async.model.Message;
+import io.techery.janet.async.model.ProtocolAction;
 
 public abstract class AsyncActionWrapper<A> {
 
     final ActionHolder<A> holder;
     protected final A action;
-    protected Message message;
+    protected ProtocolAction protocolAction;
     private ScheduledFuture scheduledFuture;
 
     protected AsyncActionWrapper(ActionHolder<A> holder) {
@@ -29,7 +29,7 @@ public abstract class AsyncActionWrapper<A> {
         return AsyncActionSynchronizer.PENDING_TIMEOUT;
     }
 
-    public boolean hasResponse() {
+    public boolean awaitsResponse() {
         return getResponseFieldType() != null;
     }
 
@@ -44,8 +44,8 @@ public abstract class AsyncActionWrapper<A> {
         this.scheduledFuture = scheduledFuture;
     }
 
-    public void setMessage(Message message) {
-        this.message = message;
+    public void setProtocolAction(ProtocolAction protocolAction) {
+        this.protocolAction = protocolAction;
     }
 
     @Override public boolean equals(Object o) {

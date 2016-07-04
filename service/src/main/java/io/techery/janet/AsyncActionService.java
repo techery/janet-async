@@ -14,15 +14,11 @@ import io.techery.janet.async.annotations.Payload;
 import io.techery.janet.async.annotations.Response;
 import io.techery.janet.async.exception.AsyncServiceException;
 import io.techery.janet.async.exception.PendingResponseException;
-import io.techery.janet.async.model.IncomingMessage;
 import io.techery.janet.async.model.Message;
-import io.techery.janet.async.model.WaitingAction;
+import io.techery.janet.async.model.ProtocolAction;
 import io.techery.janet.async.protocol.AsyncProtocol;
 import io.techery.janet.body.ActionBody;
-import io.techery.janet.body.BytesArrayBody;
-import io.techery.janet.body.StringBody;
 import io.techery.janet.converter.Converter;
-import io.techery.janet.converter.ConverterException;
 
 /**
  * Provide support async protocols. {@link AsyncActionService} performs actions with annotation
@@ -104,7 +100,7 @@ final public class AsyncActionService extends ActionService {
                 connect(false);
             }
             sendAction(wrapper);
-            if (!wrapper.hasResponse()) {
+            if (!wrapper.awaitsResponse()) {
                 callback.onSuccess(holder);
             }
         } catch (CancelException ignored) {
@@ -116,7 +112,7 @@ final public class AsyncActionService extends ActionService {
     @Override protected <A> void cancel(ActionHolder<A> holder) {
         AsyncActionWrapper wrapper = getAsyncActionWrapper(holder);
         runningActions.remove(holder.action());
-        if (wrapper.hasResponse()) {
+        if (wrapper.awaitsResponse()) {
             synchronizer.remove(wrapper);
         }
     }
@@ -129,22 +125,18 @@ final public class AsyncActionService extends ActionService {
             } else {
                 payloadBody = converter.toBody(wrapper.getPayload());
             }
-            Message message;
-            byte[] content = payloadBody.getContent();
-            if (wrapper.isBytesPayload()) {
-                message = protocol.binaryMessageRule().createMessage(wrapper.getEvent(), content);
-            } else {
-                message = protocol.textMessageRule().createMessage(wrapper.getEvent(), new String(content));
-            }
-            wrapper.setMessage(message);
+            ProtocolAction protocolAction = ProtocolAction.of(wrapper.getEvent())
+                    .payload(payloadBody, wrapper.isBytesPayload());
+            Message message = protocol.messageRule().createMessage(protocolAction);
             client.send(message);
-            if (wrapper.hasResponse()) {
+            if (wrapper.awaitsResponse()) {
                 if (protocol.responseMatcher() == null) {
                     throw new JanetInternalException(
                             String.format("Action %s can't be sent because waits response but ResponseMatcher wasn't declared", wrapper.action
                                     .getClass()
                                     .getSimpleName()));
                 }
+                wrapper.setProtocolAction(protocolAction);
                 synchronizer.put(wrapper);
             }
             throwIfCanceled(wrapper.action);
@@ -194,48 +186,53 @@ final public class AsyncActionService extends ActionService {
     }
 
     private void onMessageReceived(Message message) {
-        Throwable extractError = null;
-        BytesArrayBody payloadBody = null;
+        Throwable protocolError = null;
+        ProtocolAction protocolAction = null;
         try {
-            payloadBody = extractPayload(message);
+            protocolAction = protocol.messageRule().handleMessage(message);
+            if (protocolAction == null) {
+                throw new NullPointerException("MessageRule.handleMessage returned null");
+            }
         } catch (Throwable throwable) {
-            extractError = throwable;
+            protocolError = throwable;
         }
-        final IncomingMessage incomingMessage = new IncomingMessage(message, payloadBody, converter);
-        List<Class> actionClasses = actionsRoster.getActionClasses(message.getEvent());
+        processReceivedAction(protocolAction, protocolError);
+        syncReceivedAction(protocolAction, protocolError);
+    }
+
+    private void processReceivedAction(ProtocolAction protocolAction, Throwable protocolError) {
+        List<Class> actionClasses = actionsRoster.getActionClasses(protocolAction.getEvent());
         for (Class actionClass : actionClasses) {
             ActionHolder holder = ActionHolder.create((createActionInstance(actionClass)));
-            if (extractError != null) {
-                callback.onFail(holder, new AsyncServiceException(extractError));
-                continue;
-            }
-            AsyncActionWrapper actionWrapper = getAsyncActionWrapper(holder);
             try {
-                actionWrapper.setPayload(incomingMessage.getPayloadAs(actionWrapper.getPayloadFieldType()));
-            } catch (ConverterException e) {
-                callback.onFail(holder, new AsyncServiceException(e));
-                continue;
+                if (protocolError != null) {
+                    throw protocolError;
+                }
+                AsyncActionWrapper actionWrapper = getAsyncActionWrapper(holder);
+                actionWrapper.setPayload(converter.fromBody(protocolAction.getPayload(), actionWrapper.getPayloadFieldType()));
+                callback.onSuccess(holder);
+            } catch (Throwable throwable) {
+                callback.onFail(holder, new AsyncServiceException(protocolError));
             }
-            callback.onSuccess(holder);
         }
+    }
+
+    private void syncReceivedAction(final ProtocolAction protocolAction, Throwable protocolError) {
         for (AsyncActionWrapper wrapper : synchronizer.sync(new AsyncActionSynchronizer.Callback() {
             @Override public boolean call(AsyncActionWrapper wrapper) {
-                WaitingAction action = new WaitingAction(wrapper.message, wrapper.getPayload(),
-                        wrapper.getPayloadFieldType(), wrapper.isBytesPayload());
-                return protocol.responseMatcher().match(action, incomingMessage);
+                return protocol.responseMatcher().match(wrapper.protocolAction, protocolAction);
             }
         })) {
             try {
-                if (extractError != null) {
-                    throw extractError;
+                if (protocolError != null) {
+                    throw protocolError;
                 }
-                wrapper.setResponse(incomingMessage.getPayloadAs(wrapper.getResponseFieldType()));
+                wrapper.setResponse(converter.fromBody(protocolAction.getPayload(), wrapper.getResponseFieldType()));
                 callback.onSuccess(wrapper.holder);
             } catch (Throwable t) {
                 callback.onFail(wrapper.holder, new AsyncServiceException(t));
             }
         }
-        incomingMessage.destroy();
     }
 
     @SuppressWarnings("FieldCanBeLocal")
@@ -309,21 +306,6 @@ final public class AsyncActionService extends ActionService {
             callback.onFail(wrapper.holder, new AsyncServiceException("Action " + wrapper.action + " hasn't got a response.", exception));
         }
     };
-
-    private BytesArrayBody extractPayload(Message message) throws Throwable {
-        switch (message.getType()) {
-            case BINARY: {
-                byte[] payload = protocol.binaryMessageRule().handleMessage(message);
-                return new BytesArrayBody(null, payload);
-            }
-            case TEXT: {
-                String payload = protocol.textMessageRule().handleMessage(message);
-                return new StringBody(payload);
-            }
-            default:
-                throw new IllegalStateException("Message type is unknown");
-        }
-    }
 
     private <A> AsyncActionWrapper getAsyncActionWrapper(ActionHolder<A> holder) {
         AsyncActionWrapper wrapper = actionWrapperFactory.make(holder);

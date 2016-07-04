@@ -1,8 +1,9 @@
 package io.techery.janet.async.protocol;
 
 import io.techery.janet.async.model.Message;
+import io.techery.janet.async.model.ProtocolAction;
 
-public interface MessageRule<T> {
+public interface MessageRule {
 
     /**
      * Invokes for each incoming message
@@ -11,8 +12,8 @@ public interface MessageRule<T> {
      * @return T extracted payload
      * @throws Throwable parsing or logic error
      */
-    T handleMessage(Message message) throws Throwable;
+    ProtocolAction handleMessage(Message message) throws Throwable;
 
-    Message createMessage(String event, T payload) throws Throwable;
+    Message createMessage(ProtocolAction payload) throws Throwable;
 
 }

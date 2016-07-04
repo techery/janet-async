@@ -1,25 +1,20 @@
 package io.techery.janet.async.protocol;
 
 import io.techery.janet.async.model.Message;
+import io.techery.janet.async.model.ProtocolAction;
 
 public final class AsyncProtocol {
 
-    private final MessageRule<String> textMessageRule;
-    private final MessageRule<byte[]> binaryMessageRule;
+    private final MessageRule messageRule;
     private final ResponseMatcher responseMatcher;
 
-    private AsyncProtocol(MessageRule<String> textMessageRule, MessageRule<byte[]> binaryMessageRule, ResponseMatcher responseMatcher) {
-        this.textMessageRule = textMessageRule;
-        this.binaryMessageRule = binaryMessageRule;
+    private AsyncProtocol(MessageRule messageRule, ResponseMatcher responseMatcher) {
+        this.messageRule = messageRule;
         this.responseMatcher = responseMatcher;
     }
 
-    public MessageRule<String> textMessageRule() {
-        return textMessageRule;
-    }
-
-    public MessageRule<byte[]> binaryMessageRule() {
-        return binaryMessageRule;
+    public MessageRule messageRule() {
+        return messageRule;
     }
 
     public ResponseMatcher responseMatcher() {
@@ -27,23 +22,14 @@ public final class AsyncProtocol {
     }
 
     public final static class Builder {
-        private MessageRule<String> textMessageRule = new SimpleTextMessageRule();
-        private MessageRule<byte[]> binaryMessageRule = new SimpleBinaryMessageRule();
+        private MessageRule messageRule = new SimpleMessageRule();
         private ResponseMatcher responseMatcher;
 
-        public Builder setTextMessageRule(MessageRule<String> converter) {
-            if (converter == null) {
+        public Builder setMessageRule(MessageRule messageRule) {
+            if (messageRule == null) {
                 throw new IllegalArgumentException("converter == null");
             }
-            this.textMessageRule = converter;
-            return this;
-        }
-
-        public Builder setBinaryMessageRule(MessageRule<byte[]> converter) {
-            if (converter == null) {
-                throw new IllegalArgumentException("converter == null");
-            }
-            this.binaryMessageRule = converter;
+            this.messageRule = messageRule;
             return this;
         }
 
@@ -56,28 +42,23 @@ public final class AsyncProtocol {
         }
 
         public AsyncProtocol build() {
-            return new AsyncProtocol(textMessageRule, binaryMessageRule, responseMatcher);
+            return new AsyncProtocol(messageRule, responseMatcher);
         }
     }
 
-    private static class SimpleTextMessageRule implements MessageRule<String> {
+    private static class SimpleMessageRule implements MessageRule {
 
-        @Override public String handleMessage(Message message) {
-            return message.getDataAsText();
+        @Override public ProtocolAction handleMessage(Message message) {
+            return ProtocolAction.from(message);
         }
 
-        @Override public Message createMessage(String event, String payload) {
-            return Message.createTextMessage(event, payload);
-        }
-    }
-
-    private static class SimpleBinaryMessageRule implements MessageRule<byte[]> {
-        @Override public byte[] handleMessage(Message message) {
-            return message.getDataAsBinary();
-        }
-
-        @Override public Message createMessage(String event, byte[] payload) {
-            return Message.createBinaryMessage(event, payload);
+        @Override public Message createMessage(ProtocolAction protocolAction) {
+            if (protocolAction.isBinaryPayload()) {
+                return Message.createBinaryMessage(protocolAction.getEvent(), protocolAction.getPayloadAsBinary());
+            } else {
+                return Message.createTextMessage(protocolAction.getEvent(), protocolAction.getPayloadAsString());
+            }
         }
     }
+
 }

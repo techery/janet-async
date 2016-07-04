@@ -1,10 +1,9 @@
 package io.techery.janet.async.protocol;
 
-import io.techery.janet.async.model.IncomingMessage;
-import io.techery.janet.async.model.WaitingAction;
+import io.techery.janet.async.model.ProtocolAction;
 
 public interface ResponseMatcher {
 
-    boolean match(WaitingAction waitingAction, IncomingMessage incomingMessage);
+    boolean match(ProtocolAction waitingAction, ProtocolAction incomingAction);
 
 }
