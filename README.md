@@ -1,16 +1,16 @@
 ## AsyncActionService
-Socket service for [Janet](https://github.com/techery/janet). Supports diff socket-clients, converters and event customization.
+The socket service for [Janet](https://github.com/techery/janet) supports diff socket clients, converters and event customization.
 
 ### Getting Started
-##### 1. Define service and add it to `Janet`
+##### 1. Define a service and add it to `Janet`
 ```java
 ActionService asyncService = new AsyncActionService(API_URL, new SocketIO(), new GsonConverter(new Gson()))
 Janet janet = new Janet.Builder().addService(asyncService).build();
 ```
 
-Service requires: end-point url, [AsyncClient](clients) and [Converter](https://github.com/techery/janet-converters).
+The service requires: endpoint URL, [AsyncClient](clients) and [Converter](https://github.com/techery/janet-converters).
  
-##### 2. Define event action class
+##### 2. Define an event action class
 ```java
 @AsyncAction("sample_action_event")
 public class SampleAction {
@@ -38,15 +38,15 @@ public class SampleAction {
 Each action is an individual class that contains all information about the request/response.
 It must be annotated with `@AsyncAction`.
 
-Action (aka event) could be:
-* sent as request message;
-* observed as incoming any time from server (see `incoming = true`);
-* sent with pending response pseudo-synchronization (see `@PendingResponse`);
+The action (aka event) can be:
+* sent as a request message
+* observed as incoming from the server at any time (see `incoming = true`)
+* sent with a pending response pseudo-synchronization (see `@PendingResponse`)
 
-##### 3. Use `ActionPipe` to establish connection and send/observe action
-Connection is controlled via system actions:
-* `ConnectAsyncAction` used to connect to server;
-* `DisconnectAsyncAction` used to disconnect from server;
+##### 3. Use `ActionPipe` to establish connection and send/observe an action
+The connection is controlled via system actions:
+* `ConnectAsyncAction` used to connect to the server;
+* `DisconnectAsyncAction` used to disconnect from the server;
 
 ```java
 // define server connection pipe
@@ -59,7 +59,7 @@ connectionPipe.observe().subscribe(new ActionStateSubscriber<ConnectAsyncAction>
 connectionPipe.send(new ConnectAsyncAction());
 ```
 
-Event could be sent regarding connection status:
+The event can be sent regarding the connection status:
 ```java
 // send event if/when connected
 connectionPipe.observeSuccessWithReplay().first()
@@ -75,21 +75,21 @@ connectionPipe.observeSuccessWithReplay().first()
 
 ### AsyncAction Configuration
 
-`@AsyncAction` annotation defines:
-* `value` – event name;
-* `incoming` – indicates we can receive action any time from server.  
+The `@AsyncAction` annotation defines:
+* `value` – an event name
+* `incoming` – indicates that you can receive an action from the server at any time 
 
-To configure event, annotate fields with:
-* `@Payload` – body to be sent/received with event, aka message;
-* `@PendingResponse` – pending action from server to sync request with:
-    * value – predicate class, defines rule to match request with response;
-    * timeout – if no response received, fail status with exception will be thrown.
+To configure the event, annotate the fields with:
+* `@Payload` – a body to be sent/received with the event, aka message
+* `@PendingResponse` – a pending action from the server to sync the request with:
+    * value – a predicate class that defines a rule to match a request with a response
+    * timeout – if no response received, the fail status with exception will be thrown
 
-### Advanced bits
-* based on annotation processing;
-* supports action inheritance;
-* supports request cancelation;
-* provides useful `AsyncServiceException` for failed requests;
+### Advanced Bits
+* based on annotation processing
+* supports action inheritance
+* supports request cancelation
+* provides useful `AsyncServiceException` for failed requests
 
 ### Download
 ```groovy
